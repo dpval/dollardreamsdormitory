@@ -1,0 +1,136 @@
+/* Dollar Dreams Dormitory — public pages (index, book, signin).
+   Two-ink print job taken from the logo: deep green and coin cream. Square corners everywhere. */
+
+:root {
+  /* colour: green ground, cream paper, the two inks swap on each */
+  --bg: #13281b;          /* the green the logo is printed in, darkened for a ground */
+  --surface: #1b3524;     /* one tone step up from the ground */
+  --ink: #efeadb;         /* cream type on green */
+  --muted: #bcc3b1;       /* soft cream for notes on green */
+  --paper: #f1ecdc;       /* the coin cream */
+  --paper-2: #e5dec8;     /* one tone step down on paper */
+  --paper-ink: #163923;   /* green type on paper */
+  --paper-muted: #4a5c4c; /* soft green for notes on paper */
+  --accent: #f1ecdc;      /* the one button on green is cream */
+  --accent-ink: #13281b;
+  --tone-1: #1f4a2e;      /* three neighbouring greens for the key tags */
+  --tone-2: #275a38;
+  --tone-3: #2f6a43;
+  --alert: #f0b9a8;       /* booked / error on green */
+
+  --font: "General Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --step-small: clamp(0.8125rem, 0.79rem + 0.1vw, 0.875rem);
+  --step-body: clamp(1.0625rem, 1rem + 0.25vw, 1.1875rem);
+  --step-lead: clamp(1.25rem, 1.1rem + 0.7vw, 1.625rem);
+  --step-head: clamp(2rem, 1.3rem + 3.2vw, 4rem);
+  --step-display: clamp(2.75rem, 1rem + 5.4vw, 6.25rem);
+
+  --margin: clamp(1rem, 2.2vw, 2rem);
+  --gutter: clamp(1rem, 2vw, 2rem);
+  --section: clamp(6rem, 12vw, 12rem);
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.76, 0, 0.24, 1);
+  --ease-soft: cubic-bezier(0.33, 1, 0.68, 1);
+  --t-press: 140ms;
+  --t-hover: 180ms;
+  --t-ui: 240ms;
+}
+
+/* ---------- reset ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--font); font-size: var(--step-body); line-height: 1.5;
+  -webkit-font-smoothing: antialiased; overflow-x: hidden;
+}
+h1, h2, h3, h4, p, figure, blockquote, ul, ol, dl, dd { margin: 0; }
+ul[class], ol[class] { padding: 0; list-style: none; }
+img, video { display: block; max-width: 100%; height: auto; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { background: none; border: 0; padding: 0; cursor: pointer; }
+a { color: inherit; }
+:target { scroll-margin-top: 5rem; }
+::selection { background: var(--paper); color: var(--paper-ink); }
+:focus-visible { outline: 3px solid var(--paper); outline-offset: 3px; }
+.on-paper :focus-visible { outline-color: var(--paper-ink); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* ---------- type ---------- */
+h1, h2, h3 { font-weight: 700; letter-spacing: -0.02em; text-wrap: balance; }
+.display { font-size: var(--step-display); line-height: 0.95; }
+.head { font-size: var(--step-head); line-height: 1; }
+.lead { font-size: var(--step-lead); line-height: 1.35; max-width: 34ch; }
+.small { font-size: var(--step-small); line-height: 1.45; }
+.muted { color: var(--muted); }
+p { max-width: 62ch; text-wrap: pretty; }
+.nums { font-variant-numeric: tabular-nums; }
+
+/* ---------- frame ---------- */
+.wrap { padding-inline: var(--margin); }
+.section { padding-block: calc(var(--section) / 2); }
+.on-paper { background: var(--paper); color: var(--paper-ink); }
+.on-paper .muted { color: var(--paper-muted); }
+
+/* ---------- top bar: wordmark, four links, one action ---------- */
+.bar {
+  position: sticky; top: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 0.75rem var(--margin); background: var(--bg);
+}
+.bar__brand { display: flex; align-items: center; gap: 0.7rem; text-decoration: none; font-weight: 700; font-size: 1.125rem; letter-spacing: -0.01em; }
+.bar__brand img { width: 2.5rem; height: 2.5rem; border-radius: 50%; }
+.bar__links { display: flex; align-items: center; gap: clamp(1rem, 2vw, 2rem); }
+.bar__links a:not(.button) { text-decoration: none; font-weight: 500; }
+@media (max-width: 52em) { .bar__links a:not(.button) { display: none; } }
+
+/* ---------- controls ---------- */
+.button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  min-height: 3.25rem; padding: 0 1.5rem;
+  background: var(--accent); color: var(--accent-ink);
+  font-weight: 600; text-decoration: none; white-space: nowrap; border: 0; cursor: pointer;
+  transition: transform var(--t-press) var(--ease-out), background-color var(--t-hover) ease, color var(--t-hover) ease;
+}
+.button:active { transform: scale(0.97); }
+.button[disabled] { opacity: 0.55; cursor: not-allowed; transform: none; }
+.on-paper .button, .button--green { background: var(--paper-ink); color: var(--paper); }
+.button--small { min-height: 2.75rem; padding: 0 1.1rem; }
+.link { text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 0.22em; text-decoration-thickness: 0.08em; transition: text-decoration-color var(--t-hover) ease; }
+@media (hover: hover) and (pointer: fine) {
+  .button:not([disabled]):hover { background: var(--paper-2); }
+  .on-paper .button:not([disabled]):hover, .button--green:not([disabled]):hover { background: var(--tone-3); }
+  .link:hover, .bar__links a:hover { text-decoration: underline; text-decoration-color: currentColor; text-underline-offset: 0.22em; }
+}
+
+/* form fields: filled, no outline boxes */
+.field-label { display: block; font-weight: 500; font-size: var(--step-small); margin: 1rem 0 0.35rem; }
+.field {
+  width: 100%; min-height: 3rem; padding: 0.7rem 0.9rem;
+  background: var(--paper-2); color: var(--paper-ink); border: 0; border-radius: 0;
+  font-size: max(1rem, var(--step-body));
+  transition: background-color var(--t-hover) ease;
+}
+.field:focus { background: #fff; outline: 3px solid var(--paper-ink); outline-offset: 0; }
+.field[readonly] { background: transparent; padding-inline: 0; font-weight: 600; }
+input[type=file].field { padding: 0.6rem; font-size: var(--step-small); }
+
+/* ---------- the stripe from the hero card, reused ---------- */
+.stripe { display: flex; height: 3.5rem; overflow: hidden; contain: inline-size; }
+.stripe span { flex: 0 0 1.75rem; background: var(--paper-ink); }
+.stripe span:nth-child(even) { background: transparent; }
+
+/* ---------- motion: content stays visible without JavaScript ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  .js [data-rise] { opacity: 0; transform: translateY(20px); animation: dd-rise 800ms var(--ease-out) forwards; animation-delay: calc(var(--i, 0) * 90ms + 120ms); }
+  .js [data-reveal] { opacity: 0; transform: translateY(24px); transition: opacity 700ms var(--ease-out) calc(var(--i, 0) * 75ms), transform 900ms var(--ease-out) calc(var(--i, 0) * 75ms); }
+  .js [data-reveal].is-in { opacity: 1; transform: none; }
+  .js .shutter[data-reveal] { opacity: 1; transform: none; clip-path: inset(0 0 100% 0); transition: clip-path 900ms var(--ease-in-out) calc(var(--i, 0) * 75ms); }
+  .js .shutter[data-reveal] img { transform: scale(1.12); transition: transform 1500ms var(--ease-soft); }
+  .js .shutter[data-reveal].is-in { clip-path: inset(0); }
+  .js .shutter[data-reveal].is-in img { transform: none; }
+}
+@keyframes dd-rise { to { opacity: 1; transform: none; } }
+.shutter { overflow: hidden; }

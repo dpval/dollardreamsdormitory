@@ -1,0 +1,11 @@
+# Block direct access to settings and setup files
+Options -Indexes
+<FilesMatch "^(config\.php|config\.local\.php|config\.example\.php|functions\.php|auth\.php|db\.php|setup\.sql|\.gitignore)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>

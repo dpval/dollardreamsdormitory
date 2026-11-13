@@ -1,258 +1,164 @@
 <?php
-session_start();
+/* Admin: viewing time slots guests can pick, and the requests they sent. */
+require_once "auth.php";
+require_admin_page();
+include "db.php";
 
-// Security Guard
-if (!isset($_SESSION['admin'])) {
-    header("Location: signin.php");
-    exit();
-}
-
-include __DIR__ . "/db.php";
-
-date_default_timezone_set('Asia/Manila');
-
-/* =========================
-   SAFE EXPIRED SCHEDULE CLEANUP ONLY
-========================= */
+/* Remove slots that have already ended */
 $today = date("Y-m-d");
 $now = date("H:i:s");
+$cleanup = $conn->prepare("DELETE FROM viewing_schedule WHERE date < ? OR (date = ? AND time_end < ?)");
+$cleanup->bind_param("sss", $today, $today, $now);
+$cleanup->execute();
 
-// Only delete viewing schedules that are strictly in the past
-$conn->query("
-    DELETE FROM viewing_schedule
-    WHERE date < '$today'
-       OR (date = '$today' AND time_end < '$now')
-");
+$schedules = $conn->query("SELECT * FROM viewing_schedule ORDER BY date ASC, time_start ASC")->fetch_all(MYSQLI_ASSOC);
+$requests = $conn->query("SELECT * FROM viewing_requests ORDER BY id DESC")->fetch_all(MYSQLI_ASSOC);
+$waiting = count(array_filter($requests, fn($r) => ($r['status'] ?? 'Pending') === 'Pending'));
+$error = $_GET['error'] ?? '';
 
-/* =========================
-   FETCH DATA
-========================= */
-$schedules = $conn->query("
-    SELECT * 
-    FROM viewing_schedule 
-    ORDER BY date ASC, time_start ASC
-");
-
-$requests = $conn->query("
-    SELECT * 
-    FROM viewing_requests 
-    ORDER BY id DESC
-");
+$page = 'viewings';
+$title = 'Viewings';
+$navCounts = admin_counts($conn);
+include __DIR__ . '/partials/admin_top.php';
 ?>
-
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Viewing Schedule - Dollar Dreams Dormitory</title>
-
 <style>
-body{
-    font-family: Arial, sans-serif;
-    margin: 0;
-    background: #f4f6fa;
-}
-
-.container{
-    padding: 20px;
-    max-width: 1200px;
-    margin: 0 auto;
-}
-
-.table-wrapper{
-    overflow-x:auto;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    margin-bottom: 30px;
-}
-
-table{
-    width:100%;
-    border-collapse:collapse;
-}
-
-th,td{
-    border:1px solid #e2e8f0;
-    padding:10px 8px;
-    text-align:center;
-    font-size: 14px;
-}
-
-th{
-    background:#183823;
-    color:white;
-}
-
-form{
-    background:white;
-    padding:20px;
-    border-radius:8px;
-    margin-bottom:25px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-}
-
-input, select{
-    padding:8px 12px;
-    margin:5px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-}
-
-button{
-    padding:8px 14px;
-    background:#183823;
-    color:white;
-    border:none;
-    border-radius:5px;
-    cursor:pointer;
-    font-weight: bold;
-}
-
-.delete-btn{
-    background:#e74c3c;
-}
-
-.pending{ color: orange; font-weight: bold; }
-.done{ color: green; font-weight: bold; }
-.cancelled{ color: red; font-weight: bold; }
-
-@media(max-width:768px){
-    table{ font-size:12px; }
-    th,td{ padding:6px 4px; }
-    input, select{ width:100%; margin:5px 0; }
-}
+.split { display: grid; grid-template-columns: minmax(0, 1fr) 384px; gap: 24px; align-items: start; }
+.split h2 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+#requestsTable td { vertical-align: middle; }
+#requestsTable .who { font-weight: 550; }
+.status-select { width: 128px; }
+.slot-form { display: grid; gap: 12px; }
+.slot-form .times { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.slot-form .input { width: 100%; }
+.slot-form .btn { width: 100%; height: 38px; }
+.rail .panel + h2 { margin-top: 24px; }
+.slots .row > div { flex: 1; min-width: 0; }
+.slots .when { font-weight: 550; }
+.slots .time { display: block; color: var(--muted); font-size: var(--fs-small); }
+.actions { display: flex; justify-content: flex-end; }
+@media (max-width: 1100px) { .split { grid-template-columns: minmax(0, 1fr); } }
 </style>
-</head>
 
-<body>
+<div class="title-row">
+  <div>
+    <h1>Viewings</h1>
+    <p class="finding">
+      <b><?= $waiting ?></b> <?= $waiting === 1 ? 'request' : 'requests' ?> waiting ·
+      <?php if ($schedules): $next = $schedules[0]; ?>
+        next slot <b><?= date('D j M', strtotime($next['date'])) ?>, <?= date('g:i A', strtotime($next['time_start'])) ?></b>
+      <?php else: ?>
+        <b>no open slots</b>, so guests cannot request a viewing yet
+      <?php endif; ?>
+    </p>
+  </div>
+</div>
 
-<?php include __DIR__ . "/partials/navbar.php"; ?>
-
-<div class="container">
-
-<h2>Viewing Schedule Management</h2>
-
-<!-- ADD SCHEDULE FORM -->
-<form method="POST" action="save_schedule.php">
-    <input type="text" name="day" placeholder="Day (e.g. Monday)" required>
-    <input type="date" name="date" min="<?= date('Y-m-d') ?>" required>
-    <input type="time" name="time_start" required>
-    <input type="time" name="time_end" required>
-    <button type="submit">Add Schedule</button>
-</form>
-
-<!-- SCHEDULES TABLE -->
-<h3>Active Viewing Slots</h3>
-<div class="table-wrapper">
-<table>
-<tr>
-    <th>Day</th>
-    <th>Date</th>
-    <th>Time Slot</th>
-    <th>Action</th>
-</tr>
-
-<?php if ($schedules && $schedules->num_rows > 0): ?>
-    <?php while($s = $schedules->fetch_assoc()): ?>
-    <tr id="schedule-row-<?= $s['id'] ?>">
-        <td><?= htmlspecialchars($s['day']) ?></td>
-        <td><?= date("F d, Y", strtotime($s['date'])) ?></td>
-        <td>
-            <?= date("h:i A", strtotime($s['time_start'])) ?> - <?= date("h:i A", strtotime($s['time_end'])) ?>
-        </td>
-        <td>
-            <button class="delete-btn" onclick="deleteSchedule(<?= $s['id'] ?>)">Delete</button>
-        </td>
-    </tr>
-    <?php endwhile; ?>
-<?php else: ?>
-    <tr><td colspan="4">No active viewing slots found.</td></tr>
+<?php if ($error !== ''): ?>
+  <p class="notice" role="alert"><?= e($error) ?></p>
 <?php endif; ?>
-</table>
-</div>
 
-<!-- VIEWING REQUESTS TABLE -->
-<h3>Customer Viewing Requests</h3>
-<div class="table-wrapper">
-<table>
-<tr>
-    <th>Name</th>
-    <th>Mobile</th>
-    <th>Requested Schedule</th>
-    <th>Date Requested</th>
-    <th>Status</th>
-    <th>Action</th>
-</tr>
-
-<?php if ($requests && $requests->num_rows > 0): ?>
-    <?php while($r = $requests->fetch_assoc()): ?>
-    <?php $statusVal = $r['status'] ?? 'Pending'; ?>
-    <tr id="request-row-<?= $r['id'] ?>">
-        <td><?= htmlspecialchars($r['name']) ?></td>
-        <td><?= htmlspecialchars($r['mobile']) ?></td>
-        <td><?= htmlspecialchars($r['schedule']) ?></td>
-        <td><?= date("F d, Y h:i A", strtotime($r['created_at'])) ?></td>
-        <td class="<?= strtolower($statusVal) ?>">
-            <select onchange="updateViewingStatus(this, <?= $r['id'] ?>)">
-                <option value="Pending" <?= $statusVal == 'Pending' ? 'selected' : '' ?>>Pending</option>
-                <option value="Done" <?= $statusVal == 'Done' ? 'selected' : '' ?>>Done</option>
-                <option value="Cancelled" <?= $statusVal == 'Cancelled' ? 'selected' : '' ?>>Cancelled</option>
-            </select>
-        </td>
-        <td>
-            <button class="delete-btn" onclick="deleteViewingRequest(<?= $r['id'] ?>)">Delete</button>
-        </td>
+<div class="split">
+  <section aria-labelledby="reqHead">
+    <h2 id="reqHead">Requests from guests</h2>
+    <div class="table-wrap">
+    <table id="requestsTable">
+    <thead>
+    <tr>
+      <th>Guest</th>
+      <th>Requested slot</th>
+      <th>Sent</th>
+      <th>Status</th>
+      <th><span class="sr-only">Actions</span></th>
     </tr>
-    <?php endwhile; ?>
-<?php else: ?>
-    <tr><td colspan="6">No customer viewing requests found.</td></tr>
-<?php endif; ?>
-</table>
+    </thead>
+    <tbody>
+    <?php if ($requests): foreach ($requests as $r): $statusVal = $r['status'] ?? 'Pending'; ?>
+      <tr id="request-row-<?= (int)$r['id'] ?>">
+        <td><span class="who"><?= e($r['name']) ?></span><a class="sub" href="tel:<?= e($r['mobile']) ?>"><?= e($r['mobile']) ?></a></td>
+        <td><?= e($r['schedule']) ?></td>
+        <td class="num"><?= date("j M, g:i A", strtotime($r['created_at'])) ?></td>
+        <td>
+          <select class="input small status-select" data-current="<?= e($statusVal) ?>" onchange="updateViewingStatus(this, <?= (int)$r['id'] ?>)" aria-label="Status for <?= e($r['name']) ?>">
+            <option value="Pending" <?= $statusVal === 'Pending' ? 'selected' : '' ?>>Waiting</option>
+            <option value="Done" <?= $statusVal === 'Done' ? 'selected' : '' ?>>Viewed</option>
+            <option value="Cancelled" <?= $statusVal === 'Cancelled' ? 'selected' : '' ?>>Cancelled</option>
+          </select>
+        </td>
+        <td><div class="actions"><button type="button" class="btn small danger delete-btn" onclick="deleteViewingRequest(<?= (int)$r['id'] ?>)">Delete</button></div></td>
+      </tr>
+    <?php endforeach; else: ?>
+      <tr><td colspan="5"><p class="empty">No viewing requests yet. Guests send them from the booking page.</p></td></tr>
+    <?php endif; ?>
+    </tbody>
+    </table>
+    </div>
+  </section>
+
+  <aside class="rail">
+    <h2>Open a slot</h2>
+    <div class="panel">
+      <!-- The day name (Monday, Tuesday...) is filled in automatically from the date -->
+      <form class="slot-form" method="POST" action="save.php">
+        <?= csrf_field() ?>
+        <input type="hidden" name="type" value="schedule">
+        <div class="field">
+          <label for="slotDate">Date</label>
+          <input class="input" id="slotDate" type="date" name="date" min="<?= date('Y-m-d') ?>" required>
+        </div>
+        <div class="times">
+          <div class="field"><label for="slotStart">From</label><input class="input" id="slotStart" type="time" name="time_start" required></div>
+          <div class="field"><label for="slotEnd">To</label><input class="input" id="slotEnd" type="time" name="time_end" required></div>
+        </div>
+        <button type="submit" class="btn primary">Add slot</button>
+      </form>
+    </div>
+
+    <h2>Open slots</h2>
+    <div class="panel slots">
+      <?php if ($schedules): ?>
+        <div class="rows">
+          <?php foreach ($schedules as $s): ?>
+            <div class="row" id="schedule-row-<?= (int)$s['id'] ?>">
+              <div>
+                <span class="when"><?= e($s['day']) ?>, <?= date("j M Y", strtotime($s['date'])) ?></span>
+                <span class="time"><?= date("g:i A", strtotime($s['time_start'])) ?> to <?= date("g:i A", strtotime($s['time_end'])) ?></span>
+              </div>
+              <button type="button" class="btn small danger delete-btn" onclick="deleteSchedule(<?= (int)$s['id'] ?>)">Delete</button>
+            </div>
+          <?php endforeach; ?>
+        </div>
+      <?php else: ?>
+        <p class="empty" style="margin:4px 0">No open slots. Add one above.</p>
+      <?php endif; ?>
+    </div>
+  </aside>
 </div>
 
-</div>
-
+<?php include __DIR__ . '/partials/admin_bottom.php'; ?>
 <script>
-function deleteSchedule(id){
-    if(!confirm("Delete schedule slot?")) return;
-
-    fetch("delete_schedule.php", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: "id=" + id
-    })
-    .then(res => res.text())
-    .then(() => {
-        let row = document.getElementById("schedule-row-" + id);
-        if(row) row.remove();
-    });
+function deleteSchedule(id) {
+  if (!confirm("Delete this viewing slot?")) return;
+  post("delete.php", { type: "schedule", id: id }).then(res => {
+    if (res === "success") document.getElementById("schedule-row-" + id)?.remove();
+    else alert(res);
+  }).catch(() => alert("Network error. Please try again."));
 }
-
-function deleteViewingRequest(id){
-    if(!confirm("Delete viewing request?")) return;
-
-    fetch("delete_viewing_request.php", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: "id=" + id
-    })
-    .then(res => res.text())
-    .then(() => {
-        let row = document.getElementById("request-row-" + id);
-        if(row) row.remove();
-    });
+function deleteViewingRequest(id) {
+  if (!confirm("Delete this viewing request?")) return;
+  post("delete.php", { type: "viewing", id: id }).then(res => {
+    if (res === "success") document.getElementById("request-row-" + id)?.remove();
+    else alert(res);
+  }).catch(() => alert("Network error. Please try again."));
 }
-
-function updateViewingStatus(select, id){
-    fetch("update_viewing_status.php", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: "id=" + id + "&status=" + encodeURIComponent(select.value)
-    });
+function updateViewingStatus(select, id) {
+  const previous = select.dataset.current;
+  select.disabled = true;
+  post("update.php", { type: "viewing", id: id, status: select.value }).then(res => {
+    if (res === "success") select.dataset.current = select.value;
+    else { alert(res); select.value = previous; }
+  }).catch(() => { alert("Network error. Please try again."); select.value = previous; })
+    .finally(() => { select.disabled = false; });
 }
 </script>
-
 </body>
 </html>

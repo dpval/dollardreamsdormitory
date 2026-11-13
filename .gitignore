@@ -1,0 +1,14 @@
+# Real passwords and API keys live only on the server
+config.php
+config.local.php
+
+# Files uploaded through the website (unit photos, guest IDs, payment proofs)
+uploads/*
+!uploads/.htaccess
+private_uploads/*
+!private_uploads/.htaccess
+
+# Local editor / OS files
+.vscode/
+.DS_Store
+Thumbs.db

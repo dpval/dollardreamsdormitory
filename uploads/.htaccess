@@ -1,0 +1,11 @@
+# Public unit photos only. Block anything that could run as code.
+Options -Indexes
+<FilesMatch "(?i)\.(php\d?|phtml|phar|pht|phps|shtml|cgi|pl|py|asp|aspx|jsp|sh|htaccess)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>

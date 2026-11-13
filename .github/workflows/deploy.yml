@@ -1,0 +1,53 @@
+# Uploads the website to InfinityFree every time you push to main.
+#
+# One-time setup (GitHub repo -> Settings -> Secrets and variables -> Actions -> New repository secret):
+#   FTP_SERVER    ftpupload.net                (InfinityFree control panel -> FTP Details)
+#   FTP_USERNAME  if0_XXXXXXXX                 (same page)
+#   FTP_PASSWORD  your hosting account password (same page, "Show")
+#
+# Only files in this repo are uploaded. config.php, uploads/ (unit photos) and private_uploads/
+# (guest IDs and payment proofs) are never in the repo, so the live copies on the server are left alone.
+# You can also run it by hand: Actions tab -> Deploy to InfinityFree -> Run workflow.
+
+name: Deploy to InfinityFree
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v4
+
+      - name: Check the FTP secrets are set
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        run: |
+          if [ -z "$FTP_SERVER" ] || [ -z "$FTP_USERNAME" ] || [ -z "$FTP_PASSWORD" ]; then
+            echo "::error::Add FTP_SERVER, FTP_USERNAME and FTP_PASSWORD under Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+
+      - name: Upload changed files to htdocs
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          server-dir: htdocs/
+          exclude: |
+            **/.git*
+            **/.git*/**
+            README.md
+            setup.sql
+            config.example.php

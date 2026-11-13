@@ -1,192 +1,80 @@
 <?php
-session_start();
+/* Admin: every unit (room or bedspace) with today's free beds, and links to edit or delete. */
+require_once "auth.php";
+require_admin_page();
+include "db.php";
 
-// Security Guard: Ensure only authenticated admins can access this page
-if (!isset($_SESSION['admin'])) {
-    header("Location: signin.php");
-    exit();
-}
+$units = get_unit_availability($conn);
+uasort($units, fn($a, $b) => [$a['unit_name'], $a['id']] <=> [$b['unit_name'], $b['id']]);
+$doors = count(array_unique(array_column($units, 'unit_name')));
+$free = array_sum(array_column($units, 'available'));
+$capacity = array_sum(array_column($units, 'capacity'));
 
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-
-include __DIR__ . "/db.php";
-
-/* =========================
-   GET UNITS
-========================= */
-$units = $conn->query("
-    SELECT * 
-    FROM units 
-    ORDER BY id DESC
-");
+$page = 'units';
+$title = 'Units';
+$navCounts = admin_counts($conn);
+include __DIR__ . '/partials/admin_top.php';
 ?>
-
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Manage Units - Dollar Dreams Dormitory</title>
-
 <style>
-body {
-    font-family: Arial, sans-serif;
-    margin: 0;
-    background: #f4f6fa;
-}
-
-.container {
-    padding: 20px;
-    max-width: 1200px;
-    margin: 0 auto;
-}
-
-.top-bar {
-    margin-bottom: 15px;
-}
-
-.btn-create {
-    display: inline-block;
-    padding: 8px 14px;
-    background: #183823;
-    color: white;
-    border-radius: 5px;
-    text-decoration: none;
-    font-weight: bold;
-    font-size: 14px;
-}
-
-.btn-create:hover {
-    background: #245336;
-}
-
-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: white;
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-}
-
-th, td {
-    border: 1px solid #e2e8f0;
-    padding: 10px;
-    text-align: center;
-    font-size: 14px;
-    vertical-align: middle;
-}
-
-th {
-    background: #183823;
-    color: white;
-    font-weight: 600;
-}
-
-tr:nth-child(even) {
-    background-color: #f8fafc;
-}
-
-img {
-    width: 80px;
-    height: 60px;
-    object-fit: cover;
-    border-radius: 5px;
-    border: 1px solid #ddd;
-}
-
-button {
-    padding: 6px 12px;
-    background: #183823;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: bold;
-}
-
-button:hover {
-    background: #245336;
-}
-
-.btn-delete {
-    background: #e74c3c;
-}
-
-.btn-delete:hover {
-    background: #c0392b;
-}
-
-a {
-    text-decoration: none;
-}
+#unitsTable td { vertical-align: middle; }
+#unitsTable .code { font-weight: 600; }
+.desc { max-width: 36ch; }
+.actions { display: flex; gap: 6px; justify-content: flex-end; }
+.actions form { display: inline; }
+.free-0 { color: var(--muted); }
 </style>
 
-</head>
-
-<body>
-
-<?php include __DIR__ . "/partials/navbar.php"; ?>
-
-<div class="container">
-
-<h2>Manage Units</h2>
-
-<div class="top-bar">
-    <a href="create_unit.php" class="btn-create">+ Create Unit</a>
+<div class="title-row">
+  <div>
+    <h1>Units</h1>
+    <p class="finding"><b><?= $doors ?></b> units, <b><?= count($units) ?></b> rooms and bedspaces · <b><?= $free ?> of <?= $capacity ?></b> beds and rooms free today</p>
+  </div>
+  <a class="btn primary" href="unit_form.php">Add a unit</a>
 </div>
 
-<table>
+<div class="table-wrap">
+<table id="unitsTable">
 <thead>
 <tr>
-    <th>ID</th>
-    <th>Unit Name</th>
-    <th>Room Type</th>
-    <th>Description</th>
-    <th>Image</th>
-    <th>Action</th>
+  <th><span class="sr-only">Photo</span></th>
+  <th>Unit</th>
+  <th>Room</th>
+  <th>Description</th>
+  <th class="n">Free today</th>
+  <th>Status</th>
+  <th><span class="sr-only">Actions</span></th>
 </tr>
 </thead>
 <tbody>
-<?php if ($units && $units->num_rows > 0): ?>
-    <?php while($u = $units->fetch_assoc()): ?>
-    <tr>
-        <td><?= htmlspecialchars($u['id']) ?></td>
-        <td><?= htmlspecialchars($u['unit_name']) ?></td>
-        <td><?= htmlspecialchars($u['room_type']) ?></td>
-        <td><?= htmlspecialchars($u['description']) ?></td>
-
-        <td>
-            <?php if (!empty($u['image'])): ?>
-                <img src="<?= htmlspecialchars($u['image']) ?>" alt="Unit Image">
-            <?php else: ?>
-                <span style="color: #888; font-size: 12px;">No Image</span>
-            <?php endif; ?>
-        </td>
-
-        <td>
-            <a href="edit_unit.php?id=<?= $u['id'] ?>">
-                <button type="button">Edit</button>
-            </a>
-
-            <a href="delete_unit.php?id=<?= $u['id'] ?>" 
-               onclick="return confirm('Are you sure you want to delete this unit?')">
-                <button type="button" class="btn-delete">Delete</button>
-            </a>
-        </td>
-    </tr>
-    <?php endwhile; ?>
-<?php else: ?>
-    <tr>
-        <td colspan="6">No units found in database.</td>
-    </tr>
+<?php if ($units): foreach ($units as $u):
+    $pill = $u['status'] === 'available' ? ['pos', 'Free'] : ($u['status'] === 'reserved' ? ['warn', 'Reserved'] : ['', 'Full']);
+?>
+  <tr>
+    <td><?php if (!empty($u['image'])): ?><img class="thumb" src="<?= e($u['image']) ?>" alt="" width="64" height="48" loading="lazy"><?php else: ?><span class="dash">—</span><?php endif; ?></td>
+    <td><span class="code"><?= e($u['unit_name']) ?></span><span class="sub"><?= e(unit_floor_label($u['unit_name'])) ?: '&nbsp;' ?></span></td>
+    <td><?= e($u['room_type']) ?></td>
+    <td class="desc"><?= e($u['description']) ?></td>
+    <td class="n <?= $u['available'] ? '' : 'free-0' ?>"><?= $u['available'] ?> <span class="dash">/ <?= $u['capacity'] ?></span></td>
+    <td><span class="pill <?= $pill[0] ?>"><?= $pill[1] ?></span></td>
+    <td>
+      <div class="actions">
+        <a class="btn small" href="unit_form.php?id=<?= (int)$u['id'] ?>">Edit</a>
+        <form method="POST" action="delete.php" onsubmit="return confirm('Delete <?= e($u['unit_name']) ?> · <?= e($u['room_type']) ?>? Past bookings keep their copy of the unit name.')">
+          <?= csrf_field() ?>
+          <input type="hidden" name="type" value="unit">
+          <input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
+          <button type="submit" class="btn small danger btn-delete">Delete</button>
+        </form>
+      </div>
+    </td>
+  </tr>
+<?php endforeach; else: ?>
+  <tr><td colspan="7"><p class="empty">No units yet. <a class="card-link" href="unit_form.php">Add the first unit</a></p></td></tr>
 <?php endif; ?>
 </tbody>
 </table>
-
 </div>
 
+<?php include __DIR__ . '/partials/admin_bottom.php'; ?>
 </body>
 </html>

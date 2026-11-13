@@ -1,65 +1,84 @@
 <?php
-// Fix session handling for hosting environment
-session_start();
-
+require_once "auth.php";
 include "db.php";
 
-// Redirect to dashboard if already logged in
-if (isset($_SESSION['admin']) && $_SESSION['admin'] === true) {
+if (is_admin()) {
     header("Location: dashboard.php");
     exit();
+}
+
+/*
+ * Passwords are stored hashed. An old plain-text password is accepted once
+ * and immediately replaced by a hash (needs the column widened by setup.sql).
+ */
+function check_admin_password($conn, $row, $pass) {
+    $stored = (string)$row['password'];
+
+    if (password_get_info($stored)['algo']) {
+        if (!password_verify($pass, $stored)) {
+            return false;
+        }
+        if (password_needs_rehash($stored, PASSWORD_DEFAULT)) {
+            upgrade_admin_password($conn, $row['id'], $pass, $stored);
+        }
+        return true;
+    }
+
+    if (!hash_equals($stored, $pass)) {
+        return false;
+    }
+    upgrade_admin_password($conn, $row['id'], $pass, $stored);
+    return true;
+}
+
+function upgrade_admin_password($conn, $id, $pass, $oldValue) {
+    $hash = password_hash($pass, PASSWORD_DEFAULT);
+    $upd = $conn->prepare("UPDATE admin SET password = ? WHERE id = ?");
+    $upd->bind_param("si", $hash, $id);
+    $upd->execute();
+    $upd->close();
+
+    // If the column is too short the hash gets cut off - put the old value back so nobody is locked out.
+    $chk = $conn->prepare("SELECT password FROM admin WHERE id = ?");
+    $chk->bind_param("i", $id);
+    $chk->execute();
+    $saved = $chk->get_result()->fetch_assoc();
+    $chk->close();
+
+    if (!$saved || !password_verify($pass, $saved['password'])) {
+        error_log("Admin password hash didn't fit - run setup.sql in phpMyAdmin.");
+        $rb = $conn->prepare("UPDATE admin SET password = ? WHERE id = ?");
+        $rb->bind_param("si", $oldValue, $id);
+        $rb->execute();
+        $rb->close();
+    }
 }
 
 $error = "";
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
-
     $user = trim($_POST['username'] ?? '');
     $pass = trim($_POST['password'] ?? '');
 
-    if (!empty($user) && !empty($pass)) {
+    if ($user === '' || $pass === '') {
+        $error = "Please fill in all fields.";
+    } else {
+        $stmt = $conn->prepare("SELECT id, password FROM admin WHERE username = ? LIMIT 1");
+        $stmt->bind_param("s", $user);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
 
-        // Check against the 'admin' database table shown in phpMyAdmin
-        $stmt = $conn->prepare("SELECT id, username, password FROM admin WHERE username = ? LIMIT 1");
-
-        if ($stmt) {
-            $stmt->bind_param("s", $user);
-            $stmt->execute();
-            $result = $stmt->get_result();
-
-            if ($row = $result->fetch_assoc()) {
-                
-                // Compare entered password with database password
-                if ($pass === $row['password']) {
-                    
-                    $_SESSION['admin'] = true;
-                    $_SESSION['admin_id'] = $row['id'];
-                    
-                    header("Location: dashboard.php");
-                    exit();
-
-                } else {
-                    $error = "Invalid username or password!";
-                }
-
-            } else {
-                $error = "Invalid username or password!";
-            }
-
-            $stmt->close();
-        } else {
-            // Fallback check if database connection fails
-            if ($user === "admin" && $pass === "admin123") {
-                $_SESSION['admin'] = true;
-                header("Location: dashboard.php");
-                exit();
-            } else {
-                $error = "Invalid username or password!";
-            }
+        if ($row && check_admin_password($conn, $row, $pass)) {
+            session_regenerate_id(true);
+            $_SESSION['admin'] = true;
+            $_SESSION['admin_id'] = $row['id'];
+            header("Location: dashboard.php");
+            exit();
         }
 
-    } else {
-        $error = "Please fill in all fields.";
+        sleep(1);   // slows down password guessing
+        $error = "Invalid username or password!";
     }
 }
 ?>
@@ -68,116 +87,64 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Admin Login - Dollar Dreams Dormitory</title>
-
+<title>Staff sign in · Dollar Dreams Dormitory</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://api.fontshare.com">
+<link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css">
 <style>
-*{ margin:0; padding:0; box-sizing:border-box; }
-body{
-    font-family:Arial, sans-serif;
-    background: linear-gradient(rgba(0,0,0,0.55), rgba(0,0,0,0.55)), url('image/hero.jpg');
-    background-size:cover;
-    background-position:center;
-    background-repeat:no-repeat;
-    background-attachment:fixed;
-    min-height:100vh;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    padding:20px;
-}
-
-.login-container{
-    width:100%;
-    max-width:420px;
-    background:rgba(255,255,255,0.96);
-    padding:35px;
-    border-radius:18px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.25);
-    text-align:center;
-}
-
-.login-container h2{ color:#183823; margin-bottom:25px; font-size:30px; }
-form{ width:100%; }
-
-input{
-    width:100%;
-    padding:14px 16px;
-    margin-bottom:15px;
-    border:1px solid #d9d9d9;
-    border-radius:10px;
-    font-size:16px;
-    outline:none;
-}
-
-input:focus{ border-color:#183823; }
-
-.login-btn{
-    width:100%;
-    padding:14px;
-    background:#183823;
-    color:white;
-    border:none;
-    border-radius:10px;
-    font-size:16px;
-    font-weight:bold;
-    cursor:pointer;
-    transition:0.3s;
-}
-
-.login-btn:hover{ background:#245336; }
-
-.back-btn{ display:inline-block; margin-top:18px; }
-
-.back-btn img{
-    width:80px;
-    height:auto;
-    border-radius:50%;
-    cursor:pointer;
-    transition:0.3s;
-}
-
-.back-btn img:hover{ transform:scale(1.08); }
-
-.error{ margin-top:15px; color:red; font-weight:bold; }
-
-@media (max-width:768px){
-    .login-container{ max-width:500px; padding:35px 25px; }
-    .login-container h2{ font-size:28px; }
-    input, .login-btn{ padding:15px; font-size:16px; }
-    .back-btn img{ width:90px; }
-}
-
-@media (max-width:480px){
-    body{ padding:15px; }
-    .login-container{ padding:30px 20px; border-radius:16px; }
-    .login-container h2{ font-size:26px; margin-bottom:20px; }
-    input{ margin-bottom:12px; }
-    .back-btn img{ width:85px; }
+body { min-height: 100svh; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.side { position: relative; overflow: hidden; }
+.side img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+@media (prefers-reduced-motion: no-preference) { .side img { animation: drift 24s var(--ease-soft) infinite alternate; } }
+@keyframes drift { from { transform: scale(1.08); } to { transform: scale(1); } }
+.panel { display: flex; flex-direction: column; justify-content: center; padding: var(--margin); }
+.login { width: min(100%, 28rem); margin: 0 auto; background: var(--paper); color: var(--paper-ink); }
+.login .stripe { height: 1.5rem; }
+.login .stripe span { flex-basis: 1.5rem; }
+.login__body { padding: clamp(1.75rem, 4vw, 2.75rem); }
+.login__seal { width: 4.5rem; border-radius: 50%; }
+.login h1 { margin-top: 1.25rem; font-size: 2.5rem; line-height: 1; }
+.login p { margin-top: 0.5rem; }
+.login .button { width: 100%; margin-top: 1.75rem; }
+.error { margin-top: 1.25rem; padding: 0.75rem 1rem; background: #f3d5cc; color: #6b1d0e; font-weight: 600; }
+.back { display: inline-block; margin-top: 1.5rem; }
+@media (max-width: 48em) {
+  body { grid-template-columns: 1fr; grid-template-rows: 30svh auto; }
+  .panel { padding-block: 0 2rem; }
+  .login { margin-top: -3rem; position: relative; }
 }
 </style>
 </head>
-
 <body>
 
-<div class="login-container">
+<div class="side" aria-hidden="true"><img src="image/herobg.jpg" alt="" width="1600" height="1000"></div>
 
-    <h2>Admin Login</h2>
+<main class="panel">
+  <div class="login on-paper">
+    <div class="stripe" aria-hidden="true"><?php for ($i = 0; $i < 24; $i++) echo '<span></span>'; ?></div>
+    <div class="login__body">
+      <img class="login__seal" src="image/logo.jpg" alt="Dollar Dreams Dormitory" width="72" height="72">
+      <h1>Staff sign in</h1>
+      <p>Bookings, units and viewing slots.</p>
 
-    <form method="POST" action="signin.php">
-        <input type="text" name="username" placeholder="Username" required autocomplete="off">
-        <input type="password" name="password" placeholder="Password" required>
-        <button type="submit" class="login-btn">Login</button>
-    </form>
+      <?php if (!empty($error)): ?>
+        <p class="error" role="alert"><?= htmlspecialchars($error) ?></p>
+      <?php endif; ?>
 
-    <a href="index.php" class="back-btn">
-        <img src="image/dddbackbutton.jpg" alt="Back">
-    </a>
+      <form method="POST" action="signin.php">
+        <label class="field-label" for="username">Username</label>
+        <input class="field" id="username" type="text" name="username" autocomplete="username" required autofocus>
+        <label class="field-label" for="password">Password</label>
+        <input class="field" id="password" type="password" name="password" autocomplete="current-password" required>
+        <button type="submit" class="button login-btn">Sign in</button>
+      </form>
 
-    <?php if (!empty($error)) { ?>
-        <div class="error"><?= htmlspecialchars($error) ?></div>
-    <?php } ?>
-
-</div>
+      <a class="back link" href="index.php">&larr; Back to the website</a>
+    </div>
+  </div>
+</main>
 
 </body>
 </html>
