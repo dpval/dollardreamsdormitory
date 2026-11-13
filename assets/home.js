@@ -1,344 +1,335 @@
-// Dollar Dreams landing page: motion and interaction (index.php).
-// One requestAnimationFrame loop drives everything: smooth scroll, springs, scroll scrubs and canvases.
-// If anything here fails, the page is still complete: every hidden state is undone by showAll().
+// Dollar Dreams landing page (index.php): loader, reveals, springs, carousels, menu and the viewing dialog.
+// The page is complete without this file; if anything throws, showAll() undoes every hidden state.
 
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
-const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const EXPO = 'cubic-bezier(0.16, 1, 0.3, 1)', QUART = 'cubic-bezier(0.25, 1, 0.5, 1)', INOUT = 'cubic-bezier(0.65, 0, 0.35, 1)';
 
 function showAll() {
-  $$('[data-rise],[data-view]').forEach((el) => el.classList.add('is-in'));
-  $('.veil')?.remove();
+  $$('[data-inview]').forEach((el) => { el.style.opacity = 1; el.style.transform = ''; });
+  $$('.ln > span, .w > span, .gw > span, .fw').forEach((s) => { s.style.transform = 'none'; s.style.opacity = 1; });
+  $$('[data-route]').forEach((r) => r.classList.add('is-in'));
+  $('.loader')?.remove();
 }
 
 try {
   window.scrollTo(0, 0);
 
-  /* ================= the ticker: one rAF loop, subscribers with their own frame rate ================= */
+  /* ---------- the root size scales up beyond a 1920px screen (the CSS scales it down below) ---------- */
+  const rootScale = () => {
+    const size = 16 - (16 * (((1920 - innerWidth) / 1920) * 100 * 0.6666)) / 100;
+    if (size > 16) document.documentElement.style.fontSize = size + 'px'; else document.documentElement.style.removeProperty('font-size');
+  };
+  rootScale(); addEventListener('resize', rootScale);
+
+  /* ---------- one frame loop ---------- */
   const subs = new Set();
-  let rafId = 0;
-  function loop(time) {
-    for (const s of [...subs]) if (time - s.last > s.every) { s.fn(time, Math.min(64, time - (s.last || time))); s.last = time; }
-    rafId = subs.size ? requestAnimationFrame(loop) : 0;
+  let raf = 0, last = 0;
+  const loop = (t) => { const dt = Math.min(64, t - (last || t)) || 16; last = t; for (const f of [...subs]) f(t, dt); raf = subs.size ? requestAnimationFrame(loop) : 0; };
+  const sub = (f) => { subs.add(f); if (!raf) { last = 0; raf = requestAnimationFrame(loop); } return () => subs.delete(f); };
+
+  /* ---------- springs: { tension, friction }, mass 1, 1ms substeps ---------- */
+  function spring(from, to, { tension = 170, friction = 26 } = {}, apply, delay = 0) {
+    const keys = Object.keys(to), x = { ...from }, v = Object.fromEntries(keys.map((k) => [k, 0]));
+    apply(x);
+    if (reduced) { apply({ ...to }); return; }
+    const start = () => {
+      const off = sub((t, dt) => {
+        let moving = false;
+        for (let i = 0; i < dt; i++) for (const k of keys) {
+          const a = -tension * (x[k] - to[k]) - friction * v[k];
+          v[k] += a * 0.001; x[k] += v[k] * 0.001;
+        }
+        for (const k of keys) if (Math.abs(v[k]) > 0.002 || Math.abs(x[k] - to[k]) > 0.002) moving = true;
+        if (!moving) { Object.assign(x, to); off(); }
+        apply(x);
+      });
+    };
+    delay ? setTimeout(start, delay) : start();
   }
-  function subscribe(fn, every = 0) {
-    const s = { fn, every, last: 0 };
-    subs.add(s);
-    if (!rafId) rafId = requestAnimationFrame(loop);
-    return () => subs.delete(s);
+  // a spring that can be retargeted (hover)
+  function live(init, cfg, apply) {
+    const x = { ...init }, v = Object.fromEntries(Object.keys(init).map((k) => [k, 0]));
+    let target = { ...init }, off = null;
+    apply(x);
+    return (to) => {
+      target = { ...target, ...to };
+      if (reduced) { Object.assign(x, target); apply(x); return; }
+      if (off) return;
+      off = sub((t, dt) => {
+        let moving = false;
+        for (let i = 0; i < dt; i++) for (const k in target) {
+          const a = -cfg.tension * (x[k] - target[k]) - cfg.friction * v[k];
+          v[k] += a * 0.001; x[k] += v[k] * 0.001;
+        }
+        for (const k in target) if (Math.abs(v[k]) > 0.002 || Math.abs(x[k] - target[k]) > 0.002) moving = true;
+        if (!moving) { Object.assign(x, target); off(); off = null; }
+        apply(x);
+      });
+    };
   }
 
-  /* ================= the spring: damped, mass 1, stepped in 1ms substeps ================= */
-  class Spring {
-    constructor(value, { tension = 170, friction = 26 } = {}) { this.value = value; this.target = value; this.v = 0; this.k = tension; this.c = friction; }
-    to(t) { this.target = t; return this; }
-    step(ms) {
-      for (let i = 0; i < Math.min(64, ms); i++) {
-        const a = this.k * (this.target - this.value) - this.c * this.v;
-        this.v += a * 0.001; this.value += this.v * 0.001;
-      }
-      if (Math.abs(this.v) < 0.001 && Math.abs(this.target - this.value) < 0.001) { this.value = this.target; this.v = 0; return true; }
-      return false;
-    }
-  }
-  // animate a set of springs until all rest
-  function run(springs, apply) {
-    const off = subscribe((t, dt) => { let done = true; for (const s of springs) done = s.step(dt || 16) && done; apply(); if (done) off(); });
-  }
-
-  /* ================= smooth scroll (Lenis), registered first so every reader sees this frame's scroll ================= */
+  /* ---------- smooth scroll (Lenis), with a scroll lock for the loader, the menu and the dialog ---------- */
   let lenis = null;
   if (!reduced) {
     try {
       const { default: Lenis } = await import('lenis');
       lenis = new Lenis({ smoothWheel: true });
-      subscribe((time) => lenis.raf(time));
-    } catch (e) { console.warn('Smooth scroll unavailable, using the browser scroll.', e); }
+      sub((t) => lenis.raf(t));
+    } catch (e) { console.warn('Smooth scroll unavailable; using the browser scroll.', e); }
   }
-  const go = (target) => (lenis ? lenis.scrollTo(target, { offset: 0 }) : target.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth' }));
-  $$('a[href^="#"]').forEach((a) => a.addEventListener('click', (e) => {
-    const t = $(a.getAttribute('href'));
-    if (!t) return;
-    e.preventDefault(); closeSheet(); go(t);
-  }));
+  const html = document.documentElement;
+  const lock = () => { lenis?.stop(); Object.assign(html.style, { position: 'relative', overflow: 'hidden', height: '100%' }); };
+  const unlock = () => { lenis?.start(); ['position', 'overflow', 'height'].forEach((p) => html.style.removeProperty(p)); };
+  const scrollToEl = (el) => (lenis ? lenis.scrollTo(el, { offset: -8 }) : el.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth' }));
 
-  /* ================= text reveals: words or letters, each on its own spring ================= */
-  function split(el) {
-    if (el.dataset.split) return [...el.children];
-    const text = el.textContent;
-    const units = el.hasAttribute('data-letters') ? [...text].map((c) => (c === ' ' ? ' ' : c)) : text.split(/\s+/).filter(Boolean);
-    el.textContent = '';
-    units.forEach((u) => { const s = document.createElement('span'); s.textContent = u; el.appendChild(s); });
-    el.dataset.split = '1';
-    return [...el.children];
-  }
-  function reveal(el, delay = 0) {
-    if (el.dataset.played) return;
-    el.dataset.played = '1';
-    const parts = split(el);
-    const letters = el.hasAttribute('data-letters');
-    const stagger = letters ? 26 : 110, from = letters ? 0.3 : 0.35;
-    if (reduced) { parts.forEach((p) => { p.style.opacity = 1; p.style.transform = 'none'; }); return; }
-    parts.forEach((p, i) => {
-      const o = new Spring(0, letters ? { tension: 200, friction: 24 } : { tension: 90, friction: 26 });
-      const y = new Spring(from, letters ? { tension: 200, friction: 24 } : { tension: 90, friction: 26 });
-      const apply = () => { p.style.opacity = o.value; p.style.transform = `translateY(${y.value}em)`; };
-      apply();
-      setTimeout(() => { o.to(1); y.to(0); run([o, y], apply); }, delay + i * stagger);
+  /* ---------- reveal primitives ---------- */
+  function revealParts(parts, { stagger = 120, base = 0, dur = 950, ease = EXPO } = {}) {
+    parts.forEach((s, i) => {
+      s.style.transition = reduced ? 'none' : `transform ${dur}ms ${ease} ${base + i * stagger}ms, opacity ${Math.round(dur * 0.6)}ms ease ${base + i * stagger}ms`;
+      s.style.transform = 'none'; s.style.opacity = 1;
     });
   }
-  // hide the split units until they play (only now that scripting has proven to work)
-  $$('[data-words],[data-letters]').forEach((el) => { if (!reduced) split(el).forEach((p) => { p.style.opacity = 0; }); });
+  function resetParts(parts) {
+    parts.forEach((s) => { s.style.transition = 'none'; s.style.transform = 'translateY(115%)'; s.style.opacity = 0; });
+    void parts[0]?.offsetWidth;   // apply the reset before the next reveal
+  }
+  const lineParts = (el) => $$('.ln > span', el);
 
-  /* ================= in-view: entrances and reveals that play once ================= */
+  // fade-and-rise words in running text
+  $$('[data-words]').forEach((p) => {
+    const text = p.textContent.trim();
+    p.setAttribute('aria-label', text);
+    p.innerHTML = text.split(/\s+/).map((w) => `<span class="fw" aria-hidden="true">${w.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))}</span>`).join(' ');
+    if (!reduced) $$('.fw', p).forEach((w) => { w.style.opacity = 0; w.style.transform = 'translateY(18px)'; });
+  });
+
+  // in-view entrances
+  const FROM = { rise: { o: 0, y: 28, s: 1 }, scale: { o: 0, y: 0, s: 0.9 }, card: { o: 0, y: 60, s: 0.92 } };
+  const CFG = { rise: { tension: 200, friction: 26 }, scale: { tension: 220, friction: 22 }, card: { tension: 170, friction: 26 } };
+  function playInview(el) {
+    if (el.dataset.played) return; el.dataset.played = '1';
+    const kind = el.dataset.from || 'rise';
+    spring(FROM[kind], { o: 1, y: 0, s: 1 }, CFG[kind], (x) => {
+      el.style.opacity = x.o;
+      el.style.transform = x.o === 1 && x.y === 0 && x.s === 1 ? '' : `translateY(${x.y}px) scale(${x.s})`;
+    }, +el.dataset.inview || 0);
+  }
+  let ready = false;
   const io = new IntersectionObserver((entries) => {
     for (const en of entries) {
       if (!en.isIntersecting) continue;
       const el = en.target;
-      el.classList.add('is-in');
-      $$('[data-words],[data-letters]', el).forEach((t, i) => reveal(t, 120 + i * 90));
-      io.unobserve(el);
+      const gated = el.hasAttribute('data-gate-inview') && !ready;
+      if (el.matches('[data-inview]') && !gated) playInview(el);
+      if (el.matches('.lines:not([data-gate])')) revealParts(lineParts(el), { stagger: 120, dur: 950 });
+      if (el.matches('[data-words]')) revealParts($$('.fw', el), { stagger: 28, base: 250, dur: 700, ease: QUART });
+      if (el.matches('.ghost')) revealParts($$('.gw > span', el), { stagger: 90, dur: 700 });
+      if (el.matches('[data-route]')) el.classList.add('is-in');
+      if (!gated) io.unobserve(el);
     }
-  }, { rootMargin: '0px 0px -18% 0px' });
-  $$('[data-view]').forEach((el) => io.observe(el));
-  // section headings outside a [data-view] block
-  const headIo = new IntersectionObserver((entries) => {
-    for (const en of entries) if (en.isIntersecting) {
-      $$('[data-words]', en.target).forEach((t, i) => reveal(t, i * 130));
-      const stop = $('.stop', en.target);
-      if (stop && !reduced) { stop.style.opacity = 0; setTimeout(() => { stop.style.transition = 'opacity 500ms'; stop.style.opacity = 1; }, 400); }
-      headIo.unobserve(en.target);
+  }, { rootMargin: '0px 0px -12% 0px' });
+  $$('[data-inview], .lines:not([data-gate]):not(.modal__title), [data-words], .ghost, [data-route]').forEach((el) => io.observe(el));
+
+  /* ---------- hover springs (not on phones and small tablets) ---------- */
+  if (matchMedia('(min-width: 769px) and (hover: hover)').matches) {
+    $$('.pill [data-hover-arrow]').forEach((a) => {
+      const go = live({ x: 0 }, { tension: 320, friction: 20 }, (v) => (a.style.transform = `translateX(${v.x}px)`));
+      a.closest('.pill').addEventListener('pointerenter', () => go({ x: 5 })); a.closest('.pill').addEventListener('pointerleave', () => go({ x: 0 }));
+    });
+    $$('.way').forEach((row) => {
+      const a = $('[data-hover-arrow]', row);
+      const go = live({ x: 0, o: 0.55 }, { tension: 300, friction: 20 }, (v) => { a.style.transform = `translateX(${v.x}px)`; a.style.opacity = v.o; });
+      row.addEventListener('pointerenter', () => go({ x: 8, o: 1 })); row.addEventListener('pointerleave', () => go({ x: 0, o: 0.55 }));
+    });
+    $$('.arrowbtn').forEach((b) => {
+      const i = $('.ico', b), flip = i.classList.contains('flip') ? -1 : 1;
+      const go = live({ s: 1 }, { tension: 320, friction: 18 }, (v) => (i.style.transform = `scale(${v.s * flip}, ${v.s})`));
+      b.addEventListener('pointerenter', () => go({ s: 1.15 })); b.addEventListener('pointerleave', () => go({ s: 1 }));
+    });
+    $$('[data-hover-scale]').forEach((t) => {
+      const img = $('img', t);
+      const go = live({ s: 1 }, { tension: 300, friction: 22 }, (v) => (img.style.transform = `scale(${v.s})`));
+      t.addEventListener('pointerenter', () => go({ s: 1.03 })); t.addEventListener('pointerleave', () => go({ s: 1 }));
+    });
+    $$('[data-hover-lift]').forEach((c) => {
+      const go = live({ y: 0 }, { tension: 300, friction: 22 }, (v) => (c.style.transform = `translateY(${v.y}px)`));
+      c.addEventListener('pointerenter', () => go({ y: -8 })); c.addEventListener('pointerleave', () => go({ y: 0 }));
+    });
+    $$('.roundbtn').forEach((b) => {
+      const x = $('.x', b); if (!x) return;
+      const go = live({ r: 0 }, { tension: 300, friction: 18 }, (v) => (x.style.transform = `rotate(${v.r}deg)`));
+      b.addEventListener('pointerenter', () => go({ r: 90 })); b.addEventListener('pointerleave', () => go({ r: 0 }));
+    });
+  }
+
+  /* ---------- scroll parallax: the hero photo and the ghost words ---------- */
+  const hero = $('.hero'), plate = $('.hero__plate'), rooms = $('.rooms');
+  const progressOf = (el) => { const b = el.getBoundingClientRect(); return clamp01((innerHeight - b.top) / (innerHeight + b.height)); };
+  if (!reduced) sub(() => {
+    if (plate) plate.style.transform = `translateY(${progressOf(hero) * 12}%)`;
+    if (rooms) {
+      const p = progressOf(rooms);
+      $$('[data-gx]', rooms).forEach((w) => { const [a, b] = w.dataset.gx.split(',').map(Number); w.style.transform = `translateX(${a + (b - a) * p}%)`; });
     }
-  }, { rootMargin: '0px 0px -15% 0px' });
-  $$('.head:not(.ident__name)').forEach((h) => headIo.observe(h));
-  const navIo = new IntersectionObserver((entries) => {
-    for (const en of entries) if (en.isIntersecting) { $$('[data-letters]', en.target).forEach((t, i) => reveal(t, 260 + i * 80)); navIo.unobserve(en.target); }
   });
-  $$('.foot__nav').forEach((n) => navIo.observe(n));
-  // reduced motion: everything is simply there, nothing waits to be scrolled to
-  if (reduced) { $$('[data-rise],[data-view]').forEach((el) => el.classList.add('is-in')); $$('[data-words],[data-letters]').forEach((t) => reveal(t)); }
 
-  /* ================= the loading veil: progress creeps, completes on load, lifts in three beats ================= */
-  function heroEntrance() {
-    $$('.hero [data-rise]').forEach((el) => {
-      const d = +el.dataset.rise || 0;
-      setTimeout(() => el.classList.add('is-in'), d);
-    });
-    reveal($('.ident__name [data-words]'), 180);
-    $$('.stats [data-letters]').forEach((t, i) => reveal(t, 1000 + i * 90));
-  }
-  const veil = $('.veil');
-  if (!veil || reduced) { veil?.remove(); heroEntrance(); }
-  else {
-    const fill = $('.veil__fill', veil), meter = $('.veil__meter span', veil), inner = $('.veil__inner', veil);
-    const prog = new Spring(0, { tension: 10, friction: 30 }).to(0.7);
-    const paint = () => { fill.style.transform = `scaleY(${prog.value})`; meter.style.transform = `scaleX(${prog.value})`; };
-    const offProg = subscribe((t, dt) => { prog.step(dt || 16); paint(); });
-    let finished = false;
-    const finish = () => {
-      if (finished) return; finished = true;
-      prog.k = 170; prog.c = 26; prog.to(1);
-      veil.setAttribute('aria-label', 'Loaded');
-      setTimeout(() => {   // beat 1: the veil's own content clears
-        veil.style.pointerEvents = 'none';
-        inner.style.transition = 'opacity 450ms, transform 450ms'; inner.style.opacity = 0; inner.style.transform = 'translateY(-0.75rem)';
-        $('.veil__meter', veil).style.transition = 'opacity 450ms'; $('.veil__meter', veil).style.opacity = 0;
-        setTimeout(() => {   // beat 2: the veil lifts and the page's entrance begins
-          veil.style.transition = 'opacity 900ms cubic-bezier(0.2,0,0,1)'; veil.style.opacity = 0;
-          heroEntrance();
-          const t0 = performance.now();
-          const off = subscribe(() => {   // beat 3: remove it once it has really faded
-            if (parseFloat(getComputedStyle(veil).opacity) <= 0.004 || performance.now() - t0 > 3000) { veil.remove(); offProg(); off(); }
-          });
-        }, 430 + 240);
-      }, 380);
+  /* ---------- hero card slider: autoplay every 3.8s once the page is ready ---------- */
+  function slider() {
+    const slides = $$('.slide'), dots = $$('[data-dots="slider"] button');
+    if (slides.length < 2) return;
+    let i = 0, timer = null;
+    const show = (n) => {
+      if (n === i) return;
+      const out = slides[i], inn = slides[n];
+      spring({ o: 1, y: 0, s: 1 }, { o: 0, y: 16, s: 0.96 }, { tension: 210, friction: 24 }, (x) => { out.style.opacity = x.o; out.style.transform = `translateY(${x.y}px) scale(${x.s})`; });
+      out.classList.remove('is-on'); out.setAttribute('aria-hidden', 'true'); out.tabIndex = -1;
+      inn.classList.add('is-on'); inn.removeAttribute('aria-hidden'); inn.removeAttribute('tabindex');
+      spring({ o: 0, y: 16, s: 0.96 }, { o: 1, y: 0, s: 1 }, { tension: 210, friction: 24 }, (x) => { inn.style.opacity = x.o; inn.style.transform = `translateY(${x.y}px) scale(${x.s})`; });
+      dots.forEach((d, k) => (k === n ? d.setAttribute('aria-current', 'true') : d.removeAttribute('aria-current')));
+      i = n;
     };
-    if (document.readyState === 'complete') setTimeout(finish, 500); else addEventListener('load', finish, { once: true });
-    setTimeout(finish, 6000);   // a slow photo never keeps the page shut
+    const play = () => { clearInterval(timer); if (!reduced) timer = setInterval(() => { if (!document.hidden) show((i + 1) % slides.length); }, 3800); };
+    dots.forEach((d, k) => d.addEventListener('click', () => { show(k); play(); }));
+    play();
   }
 
-  /* ================= scroll scrub helper: progress of an element between two positions ================= */
-  const vh = () => innerHeight || 1;
-  function progress(el, start, end) {   // start/end: [edge of element, edge of viewport] e.g. ['top','bottom']
-    const b = el.getBoundingClientRect();
-    const at = (edge) => (edge === 'top' ? b.top : edge === 'bottom' ? b.bottom : b.top + b.height / 2);
-    const vp = (edge) => (edge === 'top' ? 0 : edge === 'bottom' ? vh() : vh() / 2);
-    const s = at(start[0]) - vp(start[1]), e = at(end[0]) - vp(end[1]);
-    return clamp01(s / (s - e || 1));
-  }
-
-  /* ================= the sticky stack: each pinned layer recedes as the next one covers it ================= */
-  const phone = matchMedia('(max-width: 639px)');
-  const pinned = $$('[data-layer]').map((layer) => ({ layer, inner: $('.layer__inner', layer), shade: $('.layer__shade', layer), next: layer.nextElementSibling }));
-  const narrow = matchMedia('(max-width: 1023px)');
-  function stack() {
-    if (narrow.matches) { pinned.forEach((p) => { p.inner.style.transform = ''; p.inner.style.visibility = 'visible'; }); return; }
-    for (const p of pinned) {
-      // a layer taller than the screen pins by its foot, so all of it is seen before the next covers it
-      p.layer.style.top = Math.min(0, vh() - p.layer.offsetHeight) + 'px';
-      if (!p.next) continue;
-      const t = clamp01(1 - p.next.getBoundingClientRect().top / vh());
-      const shrink = phone.matches || reduced ? 0 : 0.1;
-      p.inner.style.transform = t > 0 && shrink ? `scale(${1 - shrink * t})` : '';
-      p.shade.style.opacity = 0.55 * t;
-      p.inner.style.visibility = t >= 1 ? 'hidden' : 'visible';
-    }
-  }
-
-  /* ================= chequered seam: the colour above carried into the block, breaking up as it scrolls ================= */
-  const noise = (x, y) => { let h = Math.imul(x, 374761393) + Math.imul(y, 668265263); h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967295; };
-  const seams = $$('canvas.seam').map((c) => ({ c, ctx: c.getContext('2d'), host: c.parentElement.closest('section'), last: -1 }));
-  function drawSeam(s) {
-    const p = reduced ? 1 : progress(s.host, ['top', 'bottom'], ['top', 'top']);
-    if (Math.abs(p - s.last) < 0.002 && s.c.width) return;
-    s.last = p;
-    const r = Math.min(devicePixelRatio || 1, 2), w = s.c.clientWidth, h = s.c.clientHeight;
-    if (s.c.width !== Math.round(w * r)) { s.c.width = Math.round(w * r); s.c.height = Math.round(h * r); }
-    const ctx = s.ctx; ctx.setTransform(r, 0, 0, r, 0, 0); ctx.clearRect(0, 0, w, h);
-    const CELL = phone.matches ? 16 : 24, cols = Math.ceil(w / CELL), rows = Math.ceil(h / CELL), lift = p * 2;
-    const surface = s.c.dataset.carry === 'light' ? css('--bg') : css('--dark'), accent = css('--accent');
-    for (let y = 0; y < rows; y++) {
-      const depth = y / Math.max(1, rows - 1) + lift;
-      if (depth > 1) break;
-      const solid = depth <= 0.16, fade = clamp01(1 - (depth - 0.16) / 0.84);
-      for (let x = 0; x < cols; x++) {
-        if (!solid) { if ((x + y) % 2) continue; if (noise(x, y) > fade) continue; }
-        ctx.fillStyle = !solid && noise(x + 101, y + 57) < 0.06 ? accent : surface;
-        ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
-      }
-    }
-  }
-
-  /* ================= contour lines: marching squares over a slowly rolling noise field ================= */
-  const vnoise = (() => {
-    const p = new Uint8Array(512); for (let i = 0; i < 256; i++) p[i] = i;
-    for (let i = 255; i > 0; i--) { const j = (noise(i, 7) * (i + 1)) | 0; [p[i], p[j]] = [p[j], p[i]]; }
-    for (let i = 0; i < 256; i++) p[i + 256] = p[i];
-    const f = (t) => t * t * (3 - 2 * t), lerp = (a, b, t) => a + (b - a) * t;
-    const g = (x, y, z) => p[(p[(p[x & 255] + y) & 511] + z) & 511] / 255;
-    return (x, y, z) => {
-      const X = Math.floor(x), Y = Math.floor(y), Z = Math.floor(z), u = f(x - X), v = f(y - Y), w = f(z - Z);
-      const a = lerp(lerp(g(X, Y, Z), g(X + 1, Y, Z), u), lerp(g(X, Y + 1, Z), g(X + 1, Y + 1, Z), u), v);
-      const b = lerp(lerp(g(X, Y, Z + 1), g(X + 1, Y, Z + 1), u), lerp(g(X, Y + 1, Z + 1), g(X + 1, Y + 1, Z + 1), u), v);
-      return lerp(a, b, w);
+  /* ---------- rooms carousel: ghost words, photo and caption change together ---------- */
+  (() => {
+    const data = JSON.parse($('#room-slides')?.textContent || '[]');
+    if (!data.length) return;
+    const words = $$('.ghost .gw > span'), plain = $('[data-ghost-plain]'), img = $('.room-card img');
+    const capName = $('[data-cap-name]'), capRole = $('[data-cap-role]'), dots = $$('[data-dots="rooms"] button');
+    let i = 0;
+    const go = (n) => {
+      i = (n + data.length) % data.length;
+      const s = data[i];
+      resetParts(words);
+      s.words.forEach((w, k) => (words[k].textContent = w));
+      plain.textContent = s.words.join(' ');
+      revealParts(words, { stagger: 90, dur: 700 });
+      spring({ o: 0 }, { o: 1 }, { tension: 260, friction: 26 }, (x) => (img.style.opacity = x.o));
+      img.src = s.img; img.alt = s.alt; capName.textContent = s.name; capRole.textContent = s.role;
+      dots.forEach((d, k) => (k === i ? d.setAttribute('aria-current', 'true') : d.removeAttribute('aria-current')));
     };
+    $$('[data-room-step]').forEach((b) => b.addEventListener('click', () => go(i + +b.dataset.roomStep)));
+    dots.forEach((d, k) => d.addEventListener('click', () => go(k)));
   })();
-  const contours = $$('canvas.contours').map((c) => ({ c, ctx: c.getContext('2d'), on: false }));
-  const cio = new IntersectionObserver((es) => es.forEach((e) => { const k = contours.find((x) => x.c === e.target); if (k) k.on = e.isIntersecting; }));
-  contours.forEach((k) => cio.observe(k.c));
-  function drawContours(k, t) {
-    const r = Math.min(devicePixelRatio || 1, 1.5), w = k.c.clientWidth, h = k.c.clientHeight;
-    if (!w || !h) return;
-    if (k.c.width !== Math.round(w * r) || k.c.height !== Math.round(h * r)) { k.c.width = Math.round(w * r); k.c.height = Math.round(h * r); }
-    const ctx = k.ctx; ctx.setTransform(r, 0, 0, r, 0, 0); ctx.clearRect(0, 0, w, h);
-    ctx.strokeStyle = k.c.dataset.contours === 'light' ? 'rgba(255,255,255,0.1)' : css('--contour');
-    ctx.lineWidth = 1;
-    const S = 22, cols = Math.ceil(w / S) + 1, rows = Math.ceil(h / S) + 1, z = t * 0.00004, field = [];
-    for (let y = 0; y <= rows; y++) { field[y] = []; for (let x = 0; x <= cols; x++) field[y][x] = vnoise(x * 0.055, y * 0.055, z) * 12; }
-    ctx.beginPath();
-    for (let level = 1; level < 12; level++) {
-      for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
-        const a = field[y][x], b = field[y][x + 1], c = field[y + 1][x + 1], d = field[y + 1][x];
-        const idx = (a > level) | ((b > level) << 1) | ((c > level) << 2) | ((d > level) << 3);
-        if (idx === 0 || idx === 15) continue;
-        const px = x * S, py = y * S, it = (p, q) => (level - p) / (q - p || 1);
-        const T = [px + S * it(a, b), py], R = [px + S, py + S * it(b, c)], B = [px + S * it(d, c), py + S], L = [px, py + S * it(a, d)];
-        const seg = (p, q) => { ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); };
-        switch (idx) {
-          case 1: case 14: seg(L, T); break; case 2: case 13: seg(T, R); break; case 3: case 12: seg(L, R); break;
-          case 4: case 11: seg(R, B); break; case 6: case 9: seg(T, B); break; case 7: case 8: seg(L, B); break;
-          case 5: seg(L, T); seg(R, B); break; case 10: seg(T, R); seg(L, B); break;
-        }
-      }
+
+  /* ---------- menu overlay ---------- */
+  const menu = $('#menu'), burger = $('[data-open-menu]');
+  let menuOpen = false;
+  function openMenu() {
+    if (menuOpen) return; menuOpen = true;
+    menu.classList.add('is-open'); menu.setAttribute('aria-hidden', 'false'); burger.setAttribute('aria-expanded', 'true'); lock();
+    spring({ o: 0 }, { o: 1 }, { tension: 260, friction: 30 }, (x) => ($('.menu__bg', menu).style.opacity = x.o));
+    const panel = $('.menu__panel', menu);
+    spring({ o: 0, y: -24 }, { o: 1, y: 0 }, { tension: 220, friction: 28 }, (x) => { panel.style.opacity = x.o; panel.style.transform = `translateY(${x.y}px)`; });
+    $$('.menu__nav a', menu).forEach((a, k) => spring({ o: 0, y: 28 }, { o: 1, y: 0 }, { tension: 200, friction: 26 }, (x) => { a.style.opacity = x.o; a.style.transform = `translateY(${x.y}px)`; }, 120 + k * 70));
+    setTimeout(() => $('.menu__top .roundbtn', menu).focus(), 60);
+  }
+  function closeMenu(refocus = true) {
+    if (!menuOpen) return; menuOpen = false;
+    const panel = $('.menu__panel', menu);
+    spring({ o: 1 }, { o: 0 }, { tension: 260, friction: 30 }, (x) => { $('.menu__bg', menu).style.opacity = x.o; panel.style.opacity = x.o; });
+    setTimeout(() => { if (!menuOpen) { menu.classList.remove('is-open'); menu.setAttribute('aria-hidden', 'true'); } }, reduced ? 0 : 400);
+    burger.setAttribute('aria-expanded', 'false'); unlock(); if (refocus) burger.focus();
+  }
+  burger?.addEventListener('click', openMenu);
+  $$('[data-close-menu]').forEach((b) => b.addEventListener('click', () => closeMenu()));
+
+  /* ---------- viewing dialog: real slots from load.php, real request to save.php ---------- */
+  const modal = $('#viewing'), form = $('#visitForm'), done = $('.visit__done'), errBox = $('.visit__err');
+  const submitBtn = $('button[type=submit]', form);
+  let modalOpen = false, slotsLoaded = false, lastFocus = null;
+  const fmtTime = (t) => { const [h, m] = t.split(':'); const n = +h; return `${n % 12 || 12}:${m} ${n >= 12 ? 'PM' : 'AM'}`; };
+  function loadSlots() {
+    if (slotsLoaded) return; slotsLoaded = true;
+    const sel = $('#visitSlot');
+    fetch('load.php?type=schedule').then((r) => r.json()).then((rows) => {
+      sel.innerHTML = rows.length ? '<option value="">Choose a time</option>' : '<option value="">No viewing slots open right now</option>';
+      rows.forEach((s) => {
+        const [y, mo, d] = s.date.split('-');
+        const date = new Date(y, mo - 1, d).toLocaleDateString('en-US', { month: 'long', day: '2-digit', year: 'numeric' });
+        const o = document.createElement('option');
+        o.value = o.textContent = `${s.day}, ${date} / ${fmtTime(s.time_start)} - ${fmtTime(s.time_end)}`;   // same wording as the booking page
+        sel.appendChild(o);
+      });
+    }).catch(() => { slotsLoaded = false; sel.innerHTML = '<option value="">Could not load slots. Please call us.</option>'; });
+  }
+  function openVisit() {
+    if (menuOpen) closeMenu(false);
+    if (modalOpen) return; modalOpen = true; lastFocus = document.activeElement;
+    modal.classList.add('is-open'); modal.setAttribute('aria-hidden', 'false'); lock(); loadSlots();
+    spring({ o: 0 }, { o: 1 }, { tension: 240, friction: 30 }, (x) => ($('.modal__bg', modal).style.opacity = x.o));
+    const panel = $('.modal__panel', modal);
+    spring({ o: 0, y: 28, s: 0.96 }, { o: 1, y: 0, s: 1 }, { tension: 240, friction: 26 }, (x) => { panel.style.opacity = x.o; panel.style.transform = `translateY(${x.y}px) scale(${x.s})`; });
+    const t = $('#visit-title'); resetParts(lineParts(t)); revealParts(lineParts(t), { stagger: 90, dur: 800 });
+    setTimeout(() => $('#visitSlot').focus(), 120);
+  }
+  function closeVisit() {
+    if (!modalOpen) return; modalOpen = false;
+    const panel = $('.modal__panel', modal);
+    spring({ o: 1 }, { o: 0 }, { tension: 240, friction: 30 }, (x) => { $('.modal__bg', modal).style.opacity = x.o; panel.style.opacity = x.o; });
+    setTimeout(() => { if (!modalOpen) { modal.classList.remove('is-open'); modal.setAttribute('aria-hidden', 'true'); } }, reduced ? 0 : 350);
+    unlock(); lastFocus?.focus?.();
+    setTimeout(() => { if (!modalOpen) { form.reset(); form.hidden = false; done.hidden = true; errBox.hidden = true; } }, 350);
+  }
+  $$('[data-open-visit]').forEach((b) => b.addEventListener('click', (e) => { e.preventDefault(); openVisit(); }));
+  $$('[data-close-visit]').forEach((b) => b.addEventListener('click', closeVisit));
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const fd = new FormData(form);
+    const problem = !fd.get('schedule') ? 'Please choose a viewing time.'
+      : !String(fd.get('name')).trim() ? 'Please enter your full name.'
+      : !/^(09\d{9}|\+639\d{9})$/.test(String(fd.get('mobile')).replace(/[\s\-()]/g, '')) ? 'Please enter a valid mobile number, e.g. 09171234567.' : '';
+    if (problem) { errBox.textContent = problem; errBox.hidden = false; return; }
+    errBox.hidden = true;
+    submitBtn.disabled = true; submitBtn.textContent = 'Sending…';
+    fetch('save.php', { method: 'POST', body: fd }).then((r) => r.text()).then((t) => {
+      if (t.trim() !== 'success') throw new Error(t.trim() || 'Could not send the request.');
+      const first = String(fd.get('name')).trim().split(/\s+/)[0] || 'there';
+      $('.visit__done-sub').textContent = `Thanks, ${first}. We will call or text you to confirm your viewing.`;
+      form.hidden = true; done.hidden = false; $('.visit__done .pill').focus();
+    }).catch((err) => { errBox.textContent = err.message.length < 160 ? err.message : 'Could not send the request. Please try again.'; errBox.hidden = false; })
+      .finally(() => { submitBtn.disabled = false; submitBtn.textContent = 'Request a viewing'; });
+  });
+  if (location.hash === '#viewing') setTimeout(openVisit, 1600);
+
+  /* ---------- anchors and keys ---------- */
+  $$('a[href^="#"]:not([data-open-visit])').forEach((a) => a.addEventListener('click', (e) => {
+    const t = $(a.getAttribute('href')); if (!t) return;
+    e.preventDefault(); if (menuOpen) closeMenu(false); scrollToEl(t);
+  }));
+  addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeVisit(); closeMenu(); } });
+
+  /* ---------- the loader: wordmark, a filling line, then the curtain slides up ---------- */
+  const MIN = reduced ? 200 : 1400, MAX = 2600, EXIT = reduced ? 0 : 850;
+  const loader = $('.loader');
+  function begin() {
+    if (ready) return; ready = true;
+    unlock();
+    if (reduced) { showAll(); slider(); return; }   // reduced motion: everything is simply there
+    revealParts($$('#hero-title .w > span'), { stagger: 140, dur: 1100 });
+    revealParts(lineParts($('.tagline')), { stagger: 110, base: 350, dur: 900 });
+    $$('[data-gate-inview]').forEach((el) => { const b = el.getBoundingClientRect(); if (b.top < innerHeight && b.bottom > 0) { playInview(el); io.unobserve(el); } });
+    slider();
+    if (loader) {
+      loader.style.transition = `transform ${EXIT}ms ${INOUT}`; loader.style.transform = 'translateY(-105%)';
+      setTimeout(() => loader.remove(), EXIT + 50);
     }
-    ctx.stroke();
   }
-
-  /* ================= halftone behind the free-today board: a dot field that thins toward the copy ================= */
-  function drawHalftone() {
-    $$('canvas.halftone').forEach((c) => {
-      const r = Math.min(devicePixelRatio || 1, 2), w = c.clientWidth, h = c.clientHeight;
-      c.width = Math.round(w * r); c.height = Math.round(h * r);
-      const ctx = c.getContext('2d'); ctx.setTransform(r, 0, 0, r, 0, 0);
-      ctx.fillStyle = '#7a7a7a';
-      const G = 14;
-      for (let y = G; y < h; y += G) for (let x = G; x < w; x += G) {
-        const n = vnoise(x * 0.008, y * 0.008, 3.1), reach = clamp01((x / w - 0.35) * 1.6);
-        const rad = Math.max(0, (n - 0.35) * 3.2) * reach;
-        if (rad > 0.25) { ctx.beginPath(); ctx.arc(x, y, Math.min(2.4, rad), 0, Math.PI * 2); ctx.fill(); }
-      }
-    });
-  }
-
-  /* ================= the timeline: rail thread, turning marker, parallax layers, hover dimming ================= */
-  const rows = $('.how__rows'), rail = $('.rail');
-  const railRun = $('.rail__run'), railMark = $('.rail__mark'), railTrack = $('.rail__track');
-  const parEls = $$('[data-par]');
-  const runSpring = new Spring(0, { tension: 140, friction: 30 });
-  function timeline(dt) {
-    if (!rows || !rail) return;
-    const rest = Math.max(0, rows.offsetHeight - 60);
-    railTrack.setAttribute('y2', rest);
-    runSpring.to(progress(rows, ['top', 'center'], ['bottom', 'bottom']) * rest);
-    runSpring.step(dt);
-    const run = runSpring.value;
-    railRun.setAttribute('height', run);
-    railMark.setAttribute('transform', `translate(8 ${run}) rotate(${(run / (rest || 1)) * 1800})`);
-    if (phone.matches || reduced) { parEls.forEach((el) => (el.style.translate = '')); return; }
-    parEls.forEach((el) => {
-      const row = el.closest('.row');
-      const p = progress(row, ['top', 'bottom'], ['bottom', 'top']);
-      const travel = (+el.dataset.par / 1440) * innerWidth;
-      el.style.translate = `0 ${(1 - 2 * p) * travel}px`;
-    });
-  }
-  if (rows && matchMedia('(hover: hover)').matches) {
-    $$('.row', rows).forEach((row) => {
-      const plate = $('.plate', row);
-      plate.addEventListener('mouseenter', () => { rows.classList.add('is-hovering'); row.classList.add('is-hot'); });
-      plate.addEventListener('mouseleave', () => { rows.classList.remove('is-hovering'); row.classList.remove('is-hot'); });
-    });
-  }
-
-  /* ================= hero photo: slow crossfade, and a tilt that follows the pointer ================= */
-  const plate = $('[data-tilt]');
-  if (plate && !reduced) {
-    const imgs = $$('img', plate); let i = 0;
-    setInterval(() => { if (document.hidden) return; imgs[i].classList.remove('is-on'); i = (i + 1) % imgs.length; imgs[i].classList.add('is-on'); }, 5500);
-    const rx = new Spring(0, { tension: 120, friction: 20 }), ry = new Spring(0, { tension: 120, friction: 20 });
-    const base = getComputedStyle(plate).transform === 'none' ? '' : 'translateY(-46%) ';
-    const apply = () => { plate.style.transform = `${matchMedia('(max-width: 1023px)').matches ? '' : base}perspective(1200px) rotateX(${rx.value}deg) rotateY(${ry.value}deg)`; };
-    addEventListener('pointermove', (e) => {
-      if (e.pointerType !== 'mouse') return;
-      rx.to(((e.clientY / innerHeight) - 0.5) * -6); ry.to(((e.clientX / innerWidth) - 0.5) * 8); run([rx, ry], apply);
-    }, { passive: true });
-  }
-
-  /* ================= menu sheet ================= */
-  const sheet = $('#menuSheet'), burger = $('.burger');
-  function openSheet() {
-    sheet.hidden = false; burger.setAttribute('aria-expanded', 'true'); lenis?.stop(); document.documentElement.style.overflow = 'hidden';
-    $$('.sheet__nav a', sheet).forEach((a, i) => { a.style.opacity = 0; a.style.transform = 'translateY(0.75rem)'; setTimeout(() => { a.style.transition = 'opacity 500ms, transform 600ms cubic-bezier(0.33,0,0,1)'; a.style.opacity = 1; a.style.transform = 'none'; }, 120 + i * 55); });
-    $('.sheet__close', sheet).focus();
-  }
-  function closeSheet() {
-    if (!sheet || sheet.hidden) return;
-    sheet.hidden = true; burger.setAttribute('aria-expanded', 'false'); lenis?.start(); document.documentElement.style.overflow = ''; burger.focus();
-  }
-  burger?.addEventListener('click', openSheet);
-  $('.sheet__close')?.addEventListener('click', closeSheet);
-  $('#menuSheet .logo')?.addEventListener('click', closeSheet);
-  $$('.sheet__nav a').forEach((a) => a.addEventListener('click', closeSheet));
-  addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
-  matchMedia('(min-width: 1280px)').addEventListener('change', (m) => m.matches && closeSheet());
-
-  /* ================= the frame loop for scroll readers and canvases ================= */
-  subscribe((t, dt) => { stack(); seams.forEach(drawSeam); timeline(dt || 16); }, 10);
-  subscribe((t) => contours.forEach((k) => { if (k.on || !k.drawn) { drawContours(k, reduced ? 0 : t); k.drawn = true; } }), reduced ? 1e9 : 1000 / 20);
-  drawHalftone();
-  let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { drawHalftone(); seams.forEach((s) => (s.last = -1)); }, 150); });
+  if (loader) {
+    lock();
+    const word = $('.loader__word', loader), fill = $('.loader__track span', loader);
+    spring({ o: 0, y: 16 }, { o: 1, y: 0 }, { tension: 200, friction: 22 }, (x) => { word.style.opacity = x.o; word.style.transform = `translateY(${x.y}px)`; });
+    requestAnimationFrame(() => { fill.style.transition = `transform ${MIN - 120}ms ${INOUT} 120ms`; fill.style.transform = 'scaleX(1)'; });
+    const countdown = () => setTimeout(begin, MIN);
+    if (document.readyState === 'complete') countdown(); else addEventListener('load', countdown, { once: true });
+    setTimeout(begin, MAX);
+  } else begin();
 } catch (err) {
   console.error(err);
   showAll();
