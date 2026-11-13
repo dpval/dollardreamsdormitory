@@ -115,7 +115,6 @@ function lines($tag, $id, array $lines, $cls = '', $extra = '') {
   <div class="hero__title"><h1 id="hero-title" class="words" data-gate><span class="sr-only">Rooms on Taft</span><span class="w" aria-hidden="true"><span>Rooms</span></span> <span class="w" aria-hidden="true"><span>on</span></span> <span class="w" aria-hidden="true"><span>Taft</span></span></h1></div>
 
   <div class="hero__foot">
-    <?= lines('p', '', ['Affordable, No-Deposit stays', 'right in the heart of the city—', 'minutes away from PGH, LRT,', 'malls, and recruitment agencies'], 'tagline', 'data-gate') ?>
     <div class="hero__cards">
       <div class="slider" data-inview="650" data-gate-inview>
         <div class="slider__stage">

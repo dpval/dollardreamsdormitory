@@ -314,7 +314,8 @@ try {
     unlock();
     if (reduced) { showAll(); slider(); return; }   // reduced motion: everything is simply there
     revealParts($$('#hero-title .w > span'), { stagger: 140, dur: 1100 });
-    revealParts(lineParts($('.tagline')), { stagger: 110, base: 350, dur: 900 });
+    const tagline = $('.tagline');   // optional: the hero may have no tagline
+    if (tagline) revealParts(lineParts(tagline), { stagger: 110, base: 350, dur: 900 });
     $$('[data-gate-inview]').forEach((el) => { const b = el.getBoundingClientRect(); if (b.top < innerHeight && b.bottom > 0) { playInview(el); io.unobserve(el); } });
     slider();
     if (loader) {
