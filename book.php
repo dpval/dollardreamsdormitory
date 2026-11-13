@@ -8,7 +8,7 @@ require_once __DIR__ . '/functions.php';   // rates only, no database needed to 
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Book a room · Dollar Dreams Dormitory</title>
-<meta name="description" content="See which beds and rooms are free today at Dollar Dreams Dormitory on Taft Avenue, then reserve on GCash or book a viewing.">
+<meta name="description" content="See which beds and rooms are available today at Dollar Dreams Dormitory on Taft Avenue, then reserve on GCash or book a viewing.">
 <script>document.documentElement.classList.add('js')</script>
 <link rel="preconnect" href="https://api.fontshare.com">
 <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
@@ -131,7 +131,7 @@ require_once __DIR__ . '/functions.php';   // rates only, no database needed to 
   <section class="intro">
     <div>
       <h1 data-rise style="--i:0">Choose a room</h1>
-      <p class="intro__lead" data-rise style="--i:1">Free beds and rooms are counted live. Pick one, choose your dates and reserve it with a small fee on GCash. No deposit.</p>
+      <p class="intro__lead" data-rise style="--i:1">Available beds and rooms are counted live. Pick one, choose your dates and reserve it with a small fee on GCash. No deposit.</p>
     </div>
 
     <!-- VIEWING SCHEDULE -->
@@ -156,7 +156,7 @@ require_once __DIR__ . '/functions.php';   // rates only, no database needed to 
       <button type="button" data-filter="bed" aria-pressed="false">Bedspace</button>
       <button type="button" data-filter="solo" aria-pressed="false">Solo</button>
       <button type="button" data-filter="couple" aria-pressed="false">Couple</button>
-      <button type="button" data-filter="free" aria-pressed="false">Free now</button>
+      <button type="button" data-filter="free" aria-pressed="false">Available now</button>
       <span class="filters__count" id="filterCount" aria-live="polite"></span>
     </div>
     <div class="carousel" id="units"><p>Loading rooms…</p></div>
@@ -342,11 +342,11 @@ function loadUnits() {
    One card per room. Availability comes from the server (functions.php), so this page,
    the dashboard and the booking check all agree. Room numbers and prices stay in the admin. */
 function freeText(r) {
-  if (r.is_bedspace) return r.available > 0 ? `${r.available} of ${r.capacity} beds free` : (r.status === "reserved" ? "All beds reserved" : "All beds booked");
-  return r.available > 0 ? "Free now" : (r.status === "reserved" ? "Reserved" : "Booked");
+  if (r.is_bedspace) return r.available > 0 ? `${r.available} of ${r.capacity} beds available` : (r.status === "reserved" ? "All beds reserved" : "All beds booked");
+  return r.available > 0 ? "Available" : (r.status === "reserved" ? "Reserved" : "Booked");
 }
 function renderRooms(rooms) {
-  // free rooms first, then by type, so the page leads with what can be booked
+  // available rooms first, then by type, so the page leads with what can be booked
   rooms.sort((a, b) => (b.available > 0) - (a.available > 0) || a.room_type.localeCompare(b.room_type));
   const html = rooms.map(r => {
     const full = r.available < 1;

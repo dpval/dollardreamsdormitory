@@ -1,13 +1,13 @@
 <?php
 /*
- * Public landing page. Free beds and rooms come from the database; the page still renders if it is down.
+ * Public landing page. Available beds and rooms come from the database; the page still renders if it is down.
  * Room numbers, floors and prices are admin-only and never appear here.
  * Look and motion: assets/home.css + assets/home.js. The "Book a viewing" dialog posts to save.php.
  */
 $DB_OPTIONAL = true;
 include "db.php";
 
-/* ---------- free beds and rooms by kind ---------- */
+/* ---------- available beds and rooms by kind ---------- */
 $photo = [
     'bed'    => ['20c19-bedspace4pax.jpg', 'Four-bed bedspace with shelves'],
     'solo'   => ['12b19-soloroomcommoncrwithac.jpg', 'Solo room with aircon'],
@@ -45,7 +45,7 @@ foreach ($slides as $key => $s) {
         'img'   => 'image/' . $photo[$key][0],
         'alt'   => $photo[$key][1],
         'name'  => $k['name'] ?? ucfirst($key),
-        'role'  => $k ? ($k['free'] . ' of ' . $k['total'] . ' free today') : 'See the booking page',
+        'role'  => $k ? ($k['free'] . ' of ' . $k['total'] . ' available today') : 'See the booking page',
     ];
 }
 
@@ -54,7 +54,7 @@ $ways = [];
 $n = 1;
 foreach ($slides as $key => $s) {
     $k = $kinds[$key] ?? null;
-    $ways[] = [sprintf('%02d', $n++), $k['name'] ?? ucfirst($key), $s['line'] . ($k ? " {$k['free']} free today." : ''), "book.php?show=$key#units"];
+    $ways[] = [sprintf('%02d', $n++), $k['name'] ?? ucfirst($key), $s['line'] . ($k ? " {$k['free']} available today." : ''), "book.php?show=$key#units"];
 }
 $ways[] = [sprintf('%02d', $n), 'Book a viewing', 'Pick a time, see the room, the kitchen and the CR before you decide.', 'book.php#viewing'];
 
@@ -77,7 +77,7 @@ function lines($tag, $id, array $lines, $cls = '', $extra = '') {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dollar Dreams Dormitory · Rooms on Taft Avenue, Malate</title>
-<meta name="description" content="Bedspace, solo and couple rooms at 1655 Taft Ave, Malate, Manila. No deposit, a short walk from PGH and Pedro Gil LRT. See what is free today and book a viewing.">
+<meta name="description" content="Bedspace, solo and couple rooms at 1655 Taft Ave, Malate, Manila. No deposit, a short walk from PGH and Pedro Gil LRT. See what is available today and book a viewing.">
 <script>document.documentElement.classList.add('js'); if ('scrollRestoration' in history) history.scrollRestoration = 'manual';</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -131,7 +131,7 @@ function lines($tag, $id, array $lines, $cls = '', $extra = '') {
         <div class="free-card__left">
           <p class="free-card__num"><?= $kinds ? $freeToday : '—' ?></p>
           <div class="pips" aria-hidden="true"><span style="--c:#22d47e"></span><span style="--c:#c2e029"></span><span style="--c:#9cbfa6"></span><span style="--c:#ffffff"></span></div>
-          <p class="free-card__cap">Beds and rooms free today</p>
+          <p class="free-card__cap">Beds and rooms available today</p>
         </div>
         <img src="image/16a07-livingroom.jpg" alt="Shared living room with a city view" width="128" height="170" loading="lazy">
       </article>
@@ -264,9 +264,9 @@ function lines($tag, $id, array $lines, $cls = '', $extra = '') {
       <p>Bedspace, solo and couple rooms by the day, the week or the month, in a high-rise on Taft Avenue.</p>
       <address><a href="tel:+639935103318">0993 510 3318</a><a href="tel:+639662291677">0966 229 1677</a><span>1655 Taft Avenue, Malate, City of Manila</span></address>
     </div>
-    <nav aria-label="Rooms"><h3>Rooms</h3><ul><li><a href="book.php?show=bed#units">Bedspace</a></li><li><a href="book.php?show=solo#units">Solo room</a></li><li><a href="book.php?show=couple#units">Couple room</a></li><li><a href="book.php?show=free#units">Free now</a></li></ul></nav>
+    <nav aria-label="Rooms"><h3>Rooms</h3><ul><li><a href="book.php?show=bed#units">Bedspace</a></li><li><a href="book.php?show=solo#units">Solo room</a></li><li><a href="book.php?show=couple#units">Couple room</a></li><li><a href="book.php?show=free#units">Available now</a></li></ul></nav>
     <nav aria-label="Visit"><h3>Visit</h3><ul><li><a href="book.php">Book a room</a></li><li><a href="book.php#viewing" data-open-visit>Book a viewing</a></li><li><a href="#location">Location</a></li><li><a href="#how">How booking works</a></li></ul></nav>
-    <nav aria-label="Dorm"><h3>Dorm</h3><ul><li><a href="#inside">Inside the units</a></li><li><a href="#rooms">Free today</a></li><li><a href="signin.php">Staff sign in</a></li></ul></nav>
+    <nav aria-label="Dorm"><h3>Dorm</h3><ul><li><a href="#inside">Inside the units</a></li><li><a href="#rooms">Available today</a></li><li><a href="signin.php">Staff sign in</a></li></ul></nav>
   </div>
   <div class="foot__bar"><p>© 2026 Dollar Dreams Dormitory. All rights reserved.</p><p>Malate, Manila</p></div>
 </footer>

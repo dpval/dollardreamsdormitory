@@ -82,7 +82,9 @@ try {
   }
   const html = document.documentElement;
   const lock = () => { lenis?.stop(); Object.assign(html.style, { position: 'relative', overflow: 'hidden', height: '100%' }); };
-  const unlock = () => { lenis?.start(); ['position', 'overflow', 'height'].forEach((p) => html.style.removeProperty(p)); };
+  // remeasure on every unlock: a page measured while locked has no scroll height, and some browsers never
+  // report the change, which left the page unscrollable until the menu was opened and closed
+  const unlock = () => { ['position', 'overflow', 'height'].forEach((p) => html.style.removeProperty(p)); lenis?.resize(); lenis?.start(); };
   const scrollToEl = (el) => (lenis ? lenis.scrollTo(el, { offset: -8 }) : el.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth' }));
 
   /* ---------- reveal primitives ---------- */
@@ -311,6 +313,7 @@ try {
   const loader = $('.loader');
   function begin() {
     if (ready) return; ready = true;
+    window.scrollTo(0, 0);   // in case a key was pressed under the curtain
     unlock();
     if (reduced) { showAll(); slider(); return; }   // reduced motion: everything is simply there
     revealParts($$('#hero-title .w > span'), { stagger: 140, dur: 1100 });
@@ -324,7 +327,12 @@ try {
     }
   }
   if (loader) {
-    lock();
+    // The curtain covers the screen, so it only has to swallow wheel and touch scrolling on itself.
+    // The page underneath is never locked, so it never gets measured at zero height.
+    lenis?.stop();
+    const block = (e) => e.preventDefault();
+    loader.addEventListener('wheel', block, { passive: false });
+    loader.addEventListener('touchmove', block, { passive: false });
     const video = $('.loader__video', loader), fill = $('.loader__track span', loader);
     if (video && !reduced) video.play().catch(() => {});   // muted, so browsers allow it; the poster shows if not
     if (video && !reduced) spring({ o: 0, s: 0.96 }, { o: 1, s: 1 }, { tension: 200, friction: 22 }, (x) => { video.style.opacity = x.o; video.style.transform = `scale(${x.s})`; });
