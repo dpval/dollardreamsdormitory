@@ -29,7 +29,9 @@ Prices are set in `functions.php` (`RATE_DAILY`, `RATE_WEEKLY`, `RATE_MONTHLY`);
 and admin screens all read them from there.
 
 Look and feel:
-- `assets/site.css`, `assets/site.js`: public pages (green and coin-cream colours from the logo, General Sans font).
+- `assets/home.css`, `assets/home.js`: the landing page (loading screen, stacking sections, free-today board,
+  walking route, booking timeline). Smooth scrolling comes from Lenis on jsDelivr; everything still works without it.
+- `assets/site.css`, `assets/site.js`: the booking and sign-in pages (green and coin-cream colours from the logo).
 - `assets/admin.css`, `assets/charts.js`: admin screens.
 - `partials/admin_top.php` / `partials/admin_bottom.php`: the admin frame (sidebar, top bar), included by every admin page.
 
