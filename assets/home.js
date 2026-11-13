@@ -305,8 +305,9 @@ try {
   }));
   addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeVisit(); closeMenu(); } });
 
-  /* ---------- the loader: wordmark, a filling line, then the curtain slides up ---------- */
-  const MIN = reduced ? 200 : 1400, MAX = 2600, EXIT = reduced ? 0 : 850;
+  /* ---------- the loader: the logo animation plays with a filling line, then the curtain slides up ---------- */
+  // long enough for the coin and the first gold rings of image/dddloaading.mp4; never longer than MAX
+  const MIN = reduced ? 200 : 2600, MAX = 4500, EXIT = reduced ? 0 : 850;
   const loader = $('.loader');
   function begin() {
     if (ready) return; ready = true;
@@ -323,8 +324,9 @@ try {
   }
   if (loader) {
     lock();
-    const word = $('.loader__word', loader), fill = $('.loader__track span', loader);
-    spring({ o: 0, y: 16 }, { o: 1, y: 0 }, { tension: 200, friction: 22 }, (x) => { word.style.opacity = x.o; word.style.transform = `translateY(${x.y}px)`; });
+    const video = $('.loader__video', loader), fill = $('.loader__track span', loader);
+    if (video && !reduced) video.play().catch(() => {});   // muted, so browsers allow it; the poster shows if not
+    if (video && !reduced) spring({ o: 0, s: 0.96 }, { o: 1, s: 1 }, { tension: 200, friction: 22 }, (x) => { video.style.opacity = x.o; video.style.transform = `scale(${x.s})`; });
     requestAnimationFrame(() => { fill.style.transition = `transform ${MIN - 120}ms ${INOUT} 120ms`; fill.style.transform = 'scaleX(1)'; });
     const countdown = () => setTimeout(begin, MIN);
     if (document.readyState === 'complete') countdown(); else addEventListener('load', countdown, { once: true });

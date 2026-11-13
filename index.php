@@ -60,7 +60,8 @@ $ways[] = [sprintf('%02d', $n), 'Book a viewing', 'Pick a time, see the room, th
 
 $walk = [['3–5', 'min to PGH'], ['5–7', 'min to Pedro Gil LRT'], ['6–8', 'min to Robinsons Manila'], ['3–10', 'min to offices on Taft']];
 
-$mark = '<svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 6.5v11M14.8 8.6c-.5-.9-1.6-1.4-2.8-1.4-1.6 0-2.8.9-2.8 2.1 0 2.9 5.8 1.6 5.8 4.6 0 1.3-1.3 2.3-3 2.3-1.3 0-2.5-.6-3-1.6"/></svg>';
+/* the real logo (image/logo.jpg), cropped to its coin */
+$mark = '<span class="logo-mark" aria-hidden="true"><img src="image/logo.jpg" alt="" width="40" height="40"></span>';
 $arrow = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
 $xIcon = '<svg class="ico x" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 function lines($tag, $id, array $lines, $cls = '', $extra = '') {
@@ -81,13 +82,15 @@ function lines($tag, $id, array $lines, $cls = '', $extra = '') {
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500&display=swap" rel="stylesheet">
+<link rel="icon" href="image/logo.jpg">
 <link rel="stylesheet" href="assets/home.css">
 </head>
 <body>
 
-<!-- LOADER: the green curtain with the wordmark and a filling line, then it slides up -->
+<!-- LOADER: the logo animation (image/dddloaading.mp4) with a filling line, then the curtain slides up -->
 <div class="loader" role="status" aria-label="Loading Dollar Dreams">
-  <p class="loader__word"><?= $mark ?><span>Dollar Dreams</span></p>
+  <video class="loader__video" muted playsinline preload="auto" poster="image/logo.jpg" aria-hidden="true"><source src="image/dddloaading.mp4" type="video/mp4"></video>
+  <p class="sr-only">Dollar Dreams Dormitory</p>
   <div class="loader__track"><span></span></div>
 </div>
 
@@ -147,6 +150,7 @@ function lines($tag, $id, array $lines, $cls = '', $extra = '') {
     </article>
   </div>
 
+  <div class="rooms__stage">
   <h2 id="rooms-title" class="ghost" aria-live="polite">
     <span class="sr-only" data-ghost-plain><?= e(implode(' ', $slideData[0]['words'])) ?></span>
     <span class="ghost__row" aria-hidden="true"><span class="gw" data-gx="-3,3"><span><?= e($slideData[0]['words'][0]) ?></span></span><span class="gw" data-gx="3,-3"><span><?= e($slideData[0]['words'][1]) ?></span></span></span>
@@ -157,6 +161,7 @@ function lines($tag, $id, array $lines, $cls = '', $extra = '') {
     <img src="<?= e($slideData[0]['img']) ?>" alt="<?= e($slideData[0]['alt']) ?>" width="512" height="683" loading="lazy">
     <figcaption class="cap"><b data-cap-name><?= e($slideData[0]['name']) ?></b><span data-cap-role><?= e($slideData[0]['role']) ?></span></figcaption>
   </figure>
+  </div>
 
   <div class="rooms__ctrl">
     <button class="arrowbtn" type="button" data-room-step="-1" aria-label="Previous room"><svg class="ico flip" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
